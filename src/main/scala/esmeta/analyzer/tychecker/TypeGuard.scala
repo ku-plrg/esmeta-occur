@@ -111,11 +111,11 @@ trait TypeGuardDecl { self: TyChecker =>
   enum RefinementTarget:
     case BranchTarget(branch: Branch, isTrue: Boolean)
     case AssertTarget(block: Block, idx: Int)
-    case IDKTarget(nd: Node)
+    case NodeTarget(nd: Node)
     def node: Node = this match
       case BranchTarget(branch, _) => branch
       case AssertTarget(block, _)  => block
-      case IDKTarget(nd)           => nd
+      case NodeTarget(nd)           => nd
     def func: Func = cfg.funcOf(node)
 
   case class DemandType(private val _ty: ValueTy) {
@@ -629,14 +629,13 @@ trait TypeGuardDecl { self: TyChecker =>
         app >> (if (isTrue) "T" else "F")
       case AssertTarget(block, idx) =>
         app >> idx
-      case IDKTarget(nd) =>
-        app >> "IDK"
+      case NodeTarget(nd) => app
   given Ordering[RefinementTarget] = Ordering.by { target =>
     import RefinementTarget.*
     target match
       case BranchTarget(branch, isTrue) => (branch.id, if (isTrue) 1 else 0)
       case AssertTarget(block, idx)     => (block.id, idx)
-      case IDKTarget(nd)                => (nd.id, 0)
+      case NodeTarget(nd)                => (nd.id, 0)
   }
 
   object ProvPrinter {
@@ -671,6 +670,8 @@ trait TypeGuardDecl { self: TyChecker =>
         case CallPath(call, ty, child) => drawProvenance(child)
         case Join(child) =>
           child.foreach(drawProvenance)
+        case Meet(child) =>
+          child.foreach(drawProvenance)
         case RefinePoint(target, child) => drawProvenance(child)
         case _                          => ()
 
@@ -697,7 +698,7 @@ trait TypeGuardDecl { self: TyChecker =>
         case p @ Meet(child) =>
           drawNode(
             getId(p),
-            "ellipse",
+            "diamond",
             NODE_COLOR,
             BG_COLOR,
             Some(p.ty.toString),
@@ -706,6 +707,13 @@ trait TypeGuardDecl { self: TyChecker =>
             drawEdge(getId(p), getId(c), EDGE_COLOR, None)
           }
         case p @ RefinePoint(target, child) =>
+          drawNode(
+            getId(p),
+            "hexagon",
+            NODE_COLOR,
+            BG_COLOR,
+            Some(s"${target.node.name} (${target.func.nameWithId})"),
+          )
           drawNaming(getId(p), NODE_COLOR, target.node.name)
           drawEdge(getId(p), getId(child), EDGE_COLOR, Some(p.ty.toString))
         case Provenance.Bot => ()

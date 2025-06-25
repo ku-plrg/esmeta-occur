@@ -1529,7 +1529,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           if refined <= dty.ty
         } yield
           if (detail)
-            refineWithLog(RefinementTarget.IDKTarget(np.node), constr, refined)
+            refineWithLog(RefinementTarget.NodeTarget(np.node), constr, refined)
           else refine(constr),
       )
 

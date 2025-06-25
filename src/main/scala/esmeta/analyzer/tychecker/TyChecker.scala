@@ -134,11 +134,6 @@ class TyChecker(
             "avg. depth" -> provAvgDepth,
             "avg. leaf" -> provAvgLeaf,
           )
-          info :+= "tables" -> Map(
-            "size table" -> provSizeTable.toList.sortBy(_._1),
-            "depth table" -> provDepthTable.toList.sortBy(_._1),
-            "leaf table" -> provLeafTable.toList.sortBy(_._1),
-          )
         if (inferTypeGuard) info :+= "guards" -> typeGuards.size
         Yaml(info: _*)
       },
@@ -214,11 +209,7 @@ class TyChecker(
           .groupBy(cfg.funcOf)
           .toList
           .sortBy(_._1)
-          .map {
-            case (f, ns) =>
-              f.nameWithId +
-              ns.sorted.map(LINE_SEP + "  " + _.name).mkString
-          }
+          .map(f => f._1.nameWithId + f._2.sorted.map(n => s"$LINE_SEP  ${n.name}").mkString)
           .mkString(LINE_SEP),
         filename = s"$unreachableDir/nodes",
         silent = silent,
@@ -250,7 +241,6 @@ class TyChecker(
       if (inferTypeGuard) {
         import ProvPrinter.*
 
-        val names = typeGuards.map(_._1.name).toSet
         dumpFile(
           name = "type guard information",
           data = typeGuards
@@ -286,7 +276,6 @@ class TyChecker(
             silent = silent,
           )
         }
-
         if (useBasicSyntaxKill) {
           dumpFile(
             name = "mutated locals",
@@ -297,7 +286,6 @@ class TyChecker(
             silent = silent,
           )
         }
-
         if (useFullSyntaxKill) {
           dumpFile(
             name = "impure functions",
@@ -307,38 +295,13 @@ class TyChecker(
           )
           dumpFile(
             name = "pure functions",
-            data = cfg.funcs
-              .filterNot(impureFuncs.contains)
-              .map(_.name)
-              .toList
-              .sorted
-              .mkString(LINE_SEP),
+            data = (cfg.funcs.map(_.name).toSet -- impureFuncs.map(
+              _.name,
+            )).toList.sorted.mkString(LINE_SEP),
             filename = s"$ANALYZE_LOG_DIR/pure",
             silent = silent,
           )
         }
-
-        // val provPath = s"$ANALYZE_LOG_DIR/provenance/"
-        // mkdir(provPath, true)
-        // mkdir(s"$provPath/guards", true)
-        // mkdir(s"$provPath/refinepoints", true)
-        // for {
-        //   (func, value) <- typeGuards
-        //   (dty, pred) <- value.guard.map
-        //   (base, (_, prov)) <- pred.map
-        // } {
-        //   val ty = value.symty
-        //   val filename = (s"$provPath/guards/${func.id}_${norm(func.name)}_${norm(dty.ty.toString())}_${norm(base.toString())}")
-        //   dumpDot(filename, draw(prov), true, true)
-        // }
-
-        // for {
-        //   ((target, base), (original, prov)) <- provenances
-        // } {
-        //   val filename = (s"$provPath/refinepoints/${prov.size}_${norm{target.func.name}}_${norm(base.toString)}_${target.node.id}")
-        //   if prov.size >= 7 then dumpDot(filename, draw(prov), true, true)
-        //   //dumpDot(filename, draw(prov), true, true)
-        // }
       }
   }
 
@@ -366,12 +329,6 @@ class TyChecker(
   def provAvgSize = provenances.values.map(_.size).sum.toDouble / provCnt
   def provAvgDepth = provenances.values.map(_.depth).sum.toDouble / provCnt
   def provAvgLeaf = provenances.values.map(_.leafCnt).sum.toDouble / provCnt
-  def provSizeTable =
-    provenances.groupMap(_._2.size)(_._1).view.mapValues(_.size).toMap
-  def provDepthTable =
-    provenances.groupMap(_._2.depth)(_._1).view.mapValues(_.size).toMap
-  def provLeafTable =
-    provenances.groupMap(_._2.leafCnt)(_._1).view.mapValues(_.size).toMap
   def provString: String =
     given Rule[Map[(RefinementTarget, Base, ValueTy), Provenance]] =
       import SymTy.given, TypeGuard.given, ValueTy.given
@@ -388,9 +345,21 @@ class TyChecker(
         app
     (new Appender >> provenances).toString
   def provList = provenances.values.toList
-  def sizeAndDepth = provList.map(p => (p.size, p.depth)).groupMapReduce(identity)(_ => 1)(_ + _).map{case ((size, depth), cnt) => s"$size,$depth,$cnt"}.mkString(LINE_SEP)
-  def depthAndLeaf = provList.map(p => (p.depth, p.leafCnt)).groupMapReduce(identity)(_ => 1)(_ + _).map{case ((depth, leaf), cnt) => s"$depth,$leaf,$cnt"}.mkString(LINE_SEP)
-  def sizeAndLeaf = provList.map(p => (p.size, p.leafCnt)).groupMapReduce(identity)(_ => 1)(_ + _).map{case ((size, leaf), cnt) => s"$size,$leaf,$cnt"}.mkString(LINE_SEP)
+  def sizeAndDepth = provList
+    .map(p => (p.size, p.depth))
+    .groupMapReduce(identity)(_ => 1)(_ + _)
+    .map { case ((size, depth), cnt) => s"$size,$depth,$cnt" }
+    .mkString(LINE_SEP)
+  def depthAndLeaf = provList
+    .map(p => (p.depth, p.leafCnt))
+    .groupMapReduce(identity)(_ => 1)(_ + _)
+    .map { case ((depth, leaf), cnt) => s"$depth,$leaf,$cnt" }
+    .mkString(LINE_SEP)
+  def sizeAndLeaf = provList
+    .map(p => (p.size, p.leafCnt))
+    .groupMapReduce(identity)(_ => 1)(_ + _)
+    .map { case ((size, leaf), cnt) => s"$size,$leaf,$cnt" }
+    .mkString(LINE_SEP)
 
   /** inferred type guards */
   def getTypeGuards: List[(Func, AbsValue)] =
