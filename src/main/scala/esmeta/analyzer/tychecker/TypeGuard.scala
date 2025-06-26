@@ -571,18 +571,22 @@ trait TypeGuardDecl { self: TyChecker =>
   import tyStringifier.given
 
   /** SymExpr */
-  given Rule[SymExpr] = (app, expr) =>
+  private def symExprRule(app: Appender, expr: SymExpr): Appender =
     import SymExpr.*
     expr match
       case SEBool(bool)  => app >> bool
       case SERef(ref)    => app >> ref
       case SEExists(ref) => app >> "(exists " >> ref >> ")"
-      case SETypeCheck(expr, ty) =>
-        app >> "(? " >> expr >> ": " >> ty >> ")"
+      case SETypeCheck(e, ty) =>
+        symExprRule(app >> "(? ", e) >> ": " >> ty >> ")"
       case SETypeOf(base) =>
-        app >> "(typeof " >> base >> ")"
+        symExprRule(app >> "(typeof ", base) >> ")"
       case SEEq(left, right) =>
-        app >> "(=" >> " " >> left >> " " >> right >> ")"
+        val a = symExprRule(app >> "(= ", left)
+        symExprRule(a >> " ", right) >> ")"
+
+  // Expose the helper as the given instance, avoiding self-referential implicit search issues.
+  given Rule[SymExpr] = symExprRule
   // case SEOr(left, right) =>
   //   app >> "(|| " >> left >> " " >> right >> ")"
   // case SEAnd(left, right) =>
