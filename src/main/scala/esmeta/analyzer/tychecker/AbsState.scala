@@ -217,7 +217,7 @@ trait AbsStateDecl { self: TyChecker =>
       if (str.isBottom) BotT
       else {
         var res = BotT
-        if (field.str contains "length") res ||= NonNegIntT
+        if (field.str.contains("length")) res ||= NonNegIntT
         if (!field.math.isBottom) res ||= CodeUnitT
         res
       }

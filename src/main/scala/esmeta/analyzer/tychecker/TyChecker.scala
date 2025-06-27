@@ -135,7 +135,7 @@ class TyChecker(
             "avg. leaf" -> provAvgLeaf,
           )
         if (inferTypeGuard) info :+= "guards" -> typeGuards.size
-        Yaml(info: _*)
+        Yaml(info*)
       },
       filename = s"$ANALYZE_LOG_DIR/summary.yml",
       silent = silent,
@@ -209,7 +209,11 @@ class TyChecker(
           .groupBy(cfg.funcOf)
           .toList
           .sortBy(_._1)
-          .map(f => f._1.nameWithId + f._2.sorted.map(n => s"$LINE_SEP  ${n.name}").mkString)
+          .map(f =>
+            f._1.nameWithId + f._2.sorted
+              .map(n => s"$LINE_SEP  ${n.name}")
+              .mkString,
+          )
           .mkString(LINE_SEP),
         filename = s"$unreachableDir/nodes",
         silent = silent,
@@ -603,7 +607,7 @@ class TyChecker(
     def mutableLocals: Set[Base] = func.nodes.flatMap(_.mutable)
     def canMakeSideEffect = impureFuncs.contains(func)
   }
-  extension (np: NodePoint[_]) {
+  extension (np: NodePoint[?]) {
     def isMutable(ref: Ref): Boolean = ref match
       case l: Local => np.func.mutableLocals.contains(l)
       case _        => false

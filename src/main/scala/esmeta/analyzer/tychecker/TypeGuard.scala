@@ -115,7 +115,7 @@ trait TypeGuardDecl { self: TyChecker =>
     def node: Node = this match
       case BranchTarget(branch, _) => branch
       case AssertTarget(block, _)  => block
-      case NodeTarget(nd)           => nd
+      case NodeTarget(nd)          => nd
     def func: Func = cfg.funcOf(node)
 
   case class DemandType(private val _ty: ValueTy) {
@@ -635,7 +635,7 @@ trait TypeGuardDecl { self: TyChecker =>
     target match
       case BranchTarget(branch, isTrue) => (branch.id, if (isTrue) 1 else 0)
       case AssertTarget(block, idx)     => (block.id, idx)
-      case NodeTarget(nd)                => (nd.id, 0)
+      case NodeTarget(nd)               => (nd.id, 0)
   }
 
   object ProvPrinter {
