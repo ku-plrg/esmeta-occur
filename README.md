@@ -1,37 +1,97 @@
-[![test](https://github.com/es-meta/esmeta/actions/workflows/ci.yml/badge.svg)](https://github.com/es-meta/esmeta/actions)
-[![license](https://badgen.net/github/license/es-meta/esmeta)](https://github.com/es-meta/esmeta/blob/main/LICENSE.md)
-[![release](https://badgen.net/github/release/es-meta/esmeta)](https://github.com/es-meta/esmeta/releases)
-[![prs](https://badgen.net/github/prs/es-meta/esmeta)](https://github.com/es-meta/esmeta/pulls)
-[![slack](https://badgen.net/badge/slack/esmeta/blue)](https://esmeta.slack.com/)
-[![site](https://badgen.net/badge/site/jekyll/blue)](https://es-meta.github.io/)
-[![doc](https://badgen.net/badge/doc/scaladoc/blue)](https://es-meta.github.io/esmeta)
+# OOPSLA'25 R2 Artifact Evaluation: ESMeta
 
-# ESMeta
-**ESMeta** is an **E**CMAScript **S**pecification **Meta**language. This
-framework extracts a mechanized specification from a given version of
-ECMAScript/JavaScript specification ([ECMA-262](https://tc39.es/ecma262/)) and
-automatically generates language-based tools.
+## Introduction
 
-## Table of Contents
+This tool is an extension of the **ESMeta**, **E**CMAScript **S**pecification **Meta**language. This framework extracts a mechanized specification from a given version of the ECMAScript/JavaScript specification ([ECMA-262](https://tc39.es/ecma262/)) and automatically generates language-based tools. It supports various features, including differential testing and static type checking for the language specification itself. Though this artifact still supports most of the features, the focus below is on performing type checking, as in the paper. 
+
+* Previously, ESMeta only performed syntactic refinement, which led to many false alarms due to insufficient information propagation. Occurrence typing was proposed to address this issue but struggled with mutation and non-boolean return types. Our work introduces a new technique using type guards, which achieves:
+  - A substantial reduction in false alarms. Specifically, our tool shows (as seen in Figure 19) that applying our technique dramatically decreases false alarms (red area).
+    - (a) **Base** (`-tycheck:no-refine`): baseline with no refinements.
+    - (b) **Syn** (`-tycheck:infer-guard=false`): original ESMeta using only syntactic refinement.
+    - (c) **Pre** (`-tycheck:use-syntactic-kill`): emulates *Occurrence Typing Modulo Theories (Kent et al., PLDI 2016)* by skipping analysis on potentially mutated variables.
+    - (d) **Bool** (`-tycheck:use-boolean-guard`): restricts demanded types to true and false, illustrating the necessity of generalized demanded types.
+    - (e) **Ours** (no extra flag): our full type guard implementation, reducing false alarms from an average of 263.63 (original *Syn*) to 26.7.
+  - No significant performance degradation, as demonstrated in Figure 20.
+  - Provenance information (**Prov**, `-tycheck:provenance`) is automatically extracted to show how type guards are derived and applied, helping readers better understand the specification.
+
+## Hardware Dependencies
+
+This tool does not require high-end hardware but benefits from:
+
+- A reasonably fast CPU. Since the analysis is single-threaded, multicore performance is not critical.
+- At least 16GB of RAM, with 32GB or more recommended.
+
+Tests were conducted on **Linux** systems with **AMD64** architecture.
+
+## Getting-Started guide
+
+1. Download a Docker image from [here]().
+2. Run a Docker with `docker run -it esmeta`, which gives you an interactive shell.
+3. Done. You can execute esmeta with the `esmeta` command, or directly execute the jar(`java -jar bin/esmeta`). 
+   * You might want to test the artifact runs well with the esmeta tycheck command - it prints the analysis result of ES2024 with the latest version, which should yield 64 alarms. 
+   * Run `./benchmark.sh` or `./benchmark-test.sh` to get a result for the full benchmark. Refer to the paragraph right below. 
+
+## Step-by-Step guide
+
+### Running the benchmark
+
+Run `./benchmark.sh` from the root directory (`/opt/esmeta`) to perform the full benchmark. This takes approximately 3 hours depending on hardware. To perform a quick test, use `./benchmark-test.sh`, which runs on just the first three ECMA-262 versions (around 5 minutes).
+
+This process produces results covering ES2024 up to the latest internal ECMA-262 version, for all experimental settings (base, syn, pre, bool, ours, prov) in the `result/` directory. Each contains analyses of 167 versions, summarized in `summary.tsv`. We recommend opening these files in a spreadsheet tool.
+
+### Manual Execution
+
+If running a benchmark is too slow, or you just need data for a single version of the ECMA-262, you may want to run a single analysis.
+
+In the interactive shell, run `esmeta tycheck {options}`. Useful options include:
+
+- `-tycheck:detail-log`: Generates detailed logs in opt/esmeta/logs/analyze.
+  - `summary.yml` provides the overall analysis summary.
+  - `errors` lists the alarms.
+  - With `-tycheck:provenance`, a `provenance-logs` file is created, detailing provenance for each refinement point.
+- `-extract:target={string}`: Specifies the ECMA-262 version by tag or hash.
+
+### Recommend to Check
+
+Please check that those work well:
+
+* Useful options include:
+  - `-tycheck:detail-log`: Generates detailed logs in opt/esmeta/logs/analyze.
+    - `summary.yml` provides the overall analysis summary.
+    - `errors` lists the alarms.
+    - With `-tycheck:provenance`, a `/provenance` directory is created, detailing provenance for each refinement point.
+  - `-extract:target={string}`: Specifies the ECMA-262 version by tag or hash.
+
+### Reusability Guide
+
+This artifact will be merged into the main ESMeta repository and integrated into the CI/CD for [ECMA-262](https://github.com/tc39/ecma262). ESMeta is designed to provide consistent type checking for the specification with minimal human intervention, so future ECMA-262 updates should require little to no additional effort.
+
+The implementation of our occurrence typing techniques is mainly in `src/main/scala/esmeta/analyzer/tychecker`: `TypeGuard.scala`, `SymTy.scala`, `AbsTransfer.scala`, `AbsValue.scala`, `Effect.scala`.
+
+These files embody the core of our method and closely align with the paper’s formalization.
+
+## Possible change after the Revision
+
+### Kick-the-Tire phase
+
+May require an additional package (Python or GraphViz), but we will set these dependencies on the Docker image accordingly. We expect that reviewers will **not need to make any changes** in this phase.
+
+### Full Review
+
+* We anticipate more substantial changes after the revision:
+  - A list of confirmed true positives (real bugs), including PRs and logs.
+  - Possible minor adjustments to the evaluation targets.
+  - Enhanced figures for direct comparison with the paper.
+  - For provenance, refined tree visualizations to better illustrate explainability.
+
+
+## (REFERENCE ONLY) Relevant part from the Original Document
 
   * [Installation Guide](#installation-guide)
     + [Download ESMeta](#download-esmeta)
     + [Environment Setting](#environment-setting)
     + [Installation of ESMeta using `sbt`](#installation-of-esmeta-using--sbt-)
-  * [Basic Commands](#basic-commands)
-    + [Parsing and Executing ECMAScript files](#parsing-and-executing-ecmascript-files)
-    + [Executing Test262 tests](#executing-test262-tests)
-  * [Supported Features](#supported-features)
-    + [Specification Exemplified with ECMA Visualizer](#specification-exemplified-with-ecma-visualizer)
-    + [Interactive Execution with ECMAScript Double Debugger](#interactive-execution-with-ecmascript-double-debugger)
-    + [Conformance Test Synthesizer from ECMA-262](#conformance-test-synthesizer-from-ecma-262)
-    + [Type Analysis on ECMA-262](#type-analysis-on-ecma-262)
-    + ~~[Meta-Level Static Analyzer for ECMAScript](#meta-level-static-analyzer-for-ecmascript)~~ (temporarily removed)
-  * [Academic Achievement](#academic-achievement)
-    + [Publications](#publications)
-    + [PLDI 2022 Tutorial](#pldi-2022-tutorial)
-    + [Communications of the ACM (CACM)](#communications-of-the-acm-cacm)
-
+  * [Type Analysis on ECMA-262](#type-analysis-on-ecma-262)
 
 ## Installation Guide
 
@@ -74,7 +134,6 @@ $ esmeta
 # Please type `esmeta help` to see the help message.
 ```
 
-
 ## Basic Commands
 
 You can run this framework with the following command:
@@ -114,235 +173,7 @@ $ esmeta help
 $ esmeta help <command>
 ```
 
-Please use the `build-cfg` command to extract a mechanized specification as a
-control-flow graph from ECMA-262:
-```bash
-$ esmeta build-cfg
-# ========================================
-#  extract phase
-# ----------------------------------------
-# ========================================
-#  compile phase
-# ----------------------------------------
-# ========================================
-#  build-cfg phase
-# ----------------------------------------
-# 0: def <BUILTIN>:INTRINSICS.SyntaxError(...): Unknown {
-#   ...
-# }
-# 1: def <INTERNAL>:BuiltinFunctionObject.Construct(...): Normal[Object] | Abrupt[throw] {
-#   ...
-# }
-# ...
-```
-The `build-cfg` command consists of three phases:
-  1. The `extract` phase extracts specification model (`esmeta.spec.Spec`) from
-     ECMA-262 (`spec.html`).
-  2. The `compile` phase compiles it into a program (`esmeta.ir.Program`) in
-     **IRES**, an **I**ntermediate **R**epresentations for **E**CMAScript
-     **S**pecification.
-  3. The `build-cfg` phase builds a control-flow graph (`esmeta.cfg.CFG`) for a
-     given IRES program.
-
-You can extract mechanized specifications from other versions of ECMA-262 with
-the `-extract:target` option. Please enter any git tag/branch names or commit
-hash as an input of the option:
-```bash
-# extract a mechanized specification from the origin/main branch version of ECMA-262
-$ esmeta build-cfg -extract:target=origin/main
-
-# extract a mechanized specification from the 2c78e6f commit version of ECMA-262
-$ esmeta build-cfg -extract:target=2c78e6f
-```
-
-### Parsing and Executing ECMAScript files
-
-After extracting mechanized specifications from ECMA-262, you can parse or
-execute ECMAScript/JavaScript programs. For example, consider the following
-example JavaScript file:
-```js
-// example.js
-let x; x ??= class {}; function* f() {}
-```
-You can parse or execute it with `parse` and `eval` commands.
-```bash
-# parse example.js
-$ esmeta parse example.js
-
-# execute example.js
-$ esmeta eval example.js
-```
-
-### Executing Test262 tests
-
-ESMeta supports the execution of [Test262](https://github.com/tc39/test262)
-tests to check the conformance between Test262 and ECMA-262.
-```bash
-# run all the applicable Test262 tests
-$ esmeta test262-test
-# ...
-# ========================================
-#  test262-test phase
-# ----------------------------------------
-# - harness                       :    96 tests are removed
-# ...
-# ----------------------------------------
-# - total: 31,537 available tests
-#   - normal: 31,537 tests
-#   - error: 0 tests
-# ----------------------------------------
-# ...
-```
-If you want to execute specific Test262 files or directories, please list their
-paths as arguments:
-```bash
-# run Test262 tests in a given directory
-$ esmeta test262-test tests/test262/test/language/expressions/addition
-```
-
-
-## Supported Features
-
-ESMeta supports other features utilizing mechanized specifications, including 1) exemplify specification with ECMA Visualizer, 2)
-interactive execution of ECMAScript/JavaScript file with a double debugger, 3)
-conformance test synthesizer, 4) type analysis of ECMA-262, and 5) meta-level
-static analysis for ECMAScript/JavaScript files.  All of them utilize mechanized
-specifications from ECMA-262. Thus, ESMeta always extracts mechanized
-specifications as control-flow graphs before performing these features.
-
-### Specification Exemplified with ECMA Visualizer
-
-> [!NOTE]
->
-> **A short [introduction video](https://youtu.be/4XMjJPNmuBM) for ECMA Visualizer and Double Debugger is available.**
-
-<img width="1150" alt="ecma-visualizer" src="https://github.com/user-attachments/assets/733403f5-03cc-4465-a773-e57d46d35180" />
-
-[**ECMA Visualizer**](https://chromewebstore.google.com/detail/nlfpedidieegejndiikebcgclhggaocd) is a Chrome Extension that helps users understand specifications by displaying rich information alongside the ecma-262 web documentation, collected through pre-fuzzing/measurement using ESMeta. This allows users to see helpful examples directly within the ecma-262 web documents. It provides the following features:
-
-- Viewing minimal JavaScript program that passes through specific algorithm steps or control flow branches (`ReturnIfAbrupt`, denoted as `?`) in the specification
-- Viewing conformance tests (from test262) that pass through selected steps
-- Filtering displayed JS code using callpath
-- One-click debugging capability to execute the displayed minimal JS code, resuming from the selected step
-
-### Interactive Execution with ECMAScript Double Debugger
-
-> [!NOTE]
->
-> **A short [introduction video](https://youtu.be/4XMjJPNmuBM) for ECMA Visualizer and Double Debugger is available.**
-
-**ECMAScript Double Debugger** extends the ECMAScript/JavaScript interpreter in
-ESMeta to help you understand how a JavaScript Program runs according to
-ECMA-262. Currently, it is in an **beta stage** and supports following features:
-
-- Step-by-step execution of ECMA-262 algorithms
-- Line-by-line execution of ECMAScript/JavaScript code
-- Breakpoints by abstract algorithm names in ECMA-262
-- Inspection of ECMA-262 internal states
-- Seeing JavaScript state from the refined ECMA-262 state
-- Step backward, or even trace back to the provenance of specification record
-
-You can access the standalone debugger for the latest official release of specification directly at [es-meta.github.io/playground/](https://es-meta.github.io/playground/). Using this link gives you immediate access without having to install ESMeta, Scala, or any other dependencies on your system.
-
-If needed, you can also set up and run the debugger locally with the following instructions:
-```bash
-# turn on server of the double debugger
-$ esmeta web
-
-# install and turn on the client-side application using NPM
-$ cd client && npm install && npm start
-```
-
-<img width="1150" alt="debugger" src="https://github.com/user-attachments/assets/6c5f29a3-6d8a-458d-a4ed-478bb00666d7">
-
-We will enhance it with the following features:
-- Add more debugger features:
-  - Record timestamps during execution for resume & suspend steps (especially for Generator).
-  - ...
-- Show the type of each variable using the type analysis result.
-- Live-edit of `ecma262/spec.html` in the specification viewer.
-
-### Conformance Test Synthesizer from ECMA-262
-
-ESMeta supports the synthesis of JavaScript files as conformance tests. We
-introduced the main concept of the test synthesis in the [ICSE 2021
-paper](https://doi.org/10.1109/ICSE43902.2021.00015) with a tool named
-[JEST](https://github.com/kaist-plrg/jest), a **J**avaScript **E**ngines and
-**S**pecification **T**ester. The test synthesis technique consists of two
-parts: 1) _program synthesis_ of JavaScript programs using **specification
-coverage** and 2) _assertion injection_ based on the mechanized specification
-extract from ECMA-262.
-
-#### Synthesis of JavaScript Programs
-
-If you want to synthesize JavaScript programs, please use the `fuzz` command:
-```bash
-esmeta fuzz -fuzz:log
-```
-It basically uses the **node/branch coverage** in the mechanized specification
-to synthesize JavaScript programs. The `-fuzz:log` option dumps the synthesized
-JavaScript programs into the `logs/fuzz/fuzz-<date>` directory with the detailed
-information of the synthesis process:
-
-* `seed`: seed of the random number generator
-* `node-coverage.json`: node coverage information
-* `branch-coverage.json`: branch coverage information
-* `constructor.json`: constructor information
-* `mutation-stat.tsv`: statistics of mutation methods
-* `selector-stat.tsv`: statistics of selector methods
-* `summary.tsv`: summary of the synthesis process for each logging interval
-* `target-conds.json`: target conditions for the synthesis
-* `unreach-funcs`: unreachable functions
-* `version`: ESMeta version information
-
-In addition, you can use **feature-sensitive coverage**, which is introduced in
-the [PLDI 2023 paper](https://doi.org/10.1145/3591240), with the following
-options:
-
-* `-fuzz:k-fs=<int>`: the depth of features for feature-sensitive coverage
-* `-fuzz:cp`: use the call path for feature-sensitive coverage
-
-For example, you can synthesize JavaScript programs with the 2-FCPS coverage
-(2-feature-sensitive coverage with call path) as follows:
-```bash
-esmeta fuzz -fuzz:log -fuzz:k-fs=2 -fuzz:cp
-```
-
-#### Assertion Injection
-
-You can inject assertions into the synthesized JavaScript programs according to
-the mechanized specification. If you want to inject assertions, please use the
-`inject` command:
-```bash
-# inject assertions based on the semantics described in ECMA-262
-$ esmeta inject example.js
-# ...
-# ========================================
-#  inject phase
-# ----------------------------------------
-# // [EXIT] normal
-# let x; x ??= class {}; function* f() {}
-#
-# $algo.set(f, "GeneratorDeclaration[0,0].InstantiateGeneratorFunctionObject")
-# $assert.sameValue(Object.getPrototypeOf(f), GeneratorFunction.prototype);
-# $assert.sameValue(Object.isExtensible(f), true);
-# ...
-```
-It prints the assertion-injected JavaScript program without definitions of
-assertions. The comment `// [EXIT] normal` denotes that this program should
-normally terminate. From the fourth line, injected assertions represent the
-expected value stored in variables, objects, or even internal properties.
-
-If you want to dump the assertion-injected code to a program, please use the
-`-inject:out` option. If you want to inject definitions of assertions as well,
-please use the `-inject:defs` option:
-```bash
-$ esmeta inject example.js -silent -inject:defs -inject:out=test.js
-# - Dumped an assertion-injected ECMAScript program into test.js.
-```
-
-
-### Type Analysis on ECMA-262
+## Type Analysis on ECMA-262
 
 ESMeta provides a type analysis on ECMA-262 to infer unknown types in the
 specification. We introduced its main concept in the [ASE 2021
@@ -376,98 +207,3 @@ $ esmeta tycheck -extract:target=origin/main
 # analyze types for 2c78e6f commit version of ECMA-262
 $ esmeta tycheck -extract:target=2c78e6f
 ```
-
-
-### ~~Meta-Level Static Analyzer for ECMAScript~~
-
-> [!WARNING]
->
-> The meta-level static analyzer is temporarily removed from the current version
-> of ESMeta. We are working on the improvement of the meta-level static analyzer
-> for ECMAScript/JavaScript programs. We will re-introduce this feature in the
-> future version of ESMeta.
-
-ESMeta also supports a meta-level static analyzer for ECMAScript/JavaScript
-programs based on mechanized specifications extracted from ECMA-262. A
-mechanized specification is an interpreter that can parse and execute JavaScript
-programs. We introduced a way to indirectly analyze an ECMAScript/JavaScript
-program by analyzing its interpreter with a restriction with the given program.
-We call it _meta-level static analysis_ and presented this technique at
-[ESEC/FSE 2022](https://dl.acm.org/doi/10.1145/3540250.3549097).
-
-If you want to analyze JavaScript program using a meta-level static analysis,
-please use the `analyze` command:
-```bash
-$ esmeta analyze example.js
-# ...
-# ========================================
-#  analyze phase
-# ----------------------------------------
-# - 108 functions are analyzed in 1688 iterations.
-```
-
-ESMeta supports an interactive Read–eval–print loop (REPL) for the analysis with
-the `-analyze:repl` option:
-```bash
-$ esmeta analyze example.js -analyze:repl
-# ========================================
-#  analyze phase
-# ----------------------------------------
-#
-# command list:
-# - help                     Show help message.
-# ...
-#
-# [1] RunJobs[42]:Call[339] -> {
-#   ...
-# }
-
-analyzer> continue
-# - Static analysis finished. (# iter: 1688)
-
-analyzer> print -expr @REALM.GlobalObject.SubMap.f.Value.SubMap.name.Value
-# "f"
-
-analyzer> exit
-```
-It showed that the property `name` of the global variable `f` points to a single
-string `"f"`.
-
-In the future version of ESMeta, we will add more kind documentation for this
-analyzer REPL.
-
-## Academic Achievement
-
-### Publications
-
-- **[FSE 2025 Demo] JSSpecVis: A JavaScript Language Specification Visualization Tool**
-  ([old repo](https://github.com/ku-plrg/js-spec-vis))
-- **[PLDI 2023] [Feature-Sensitive Coverage for Conformance Testing of Programming Language Implementations](https://doi.org/10.1145/3591240)**
-  ([old repo](https://github.com/jestfs/jestfs))
-- **[ESEC/FSE 2022] [Automatically Deriving JavaScript Static Analyzers from Specifications using Meta-Level Static Analysis](https://doi.org/10.1145/3540250.3549097)**
-  ([old repo](https://github.com/kaist-plrg/jsaver))
-- **[ASE 2021] [JSTAR: JavaScript Specification Type Analyzer using Refinement](https://doi.org/10.1109/ASE51524.2021.9678781)**
-  ([old repo](https://github.com/kaist-plrg/jstar))
-- **[ICSE 2021] [JEST: N+1-version Differential Testing of Both JavaScript Engines](https://doi.org/10.1109/ICSE43902.2021.00015)**
-  ([old repo](https://github.com/kaist-plrg/jest))
-- **[ASE 2020] [JISET: JavaScript IR-based Semantics Extraction Toolchain](https://doi.org/10.1145/3324884.3416632)**
-  ([old repo](https://github.com/kaist-plrg/jiset))
-
-### PLDI 2022 Tutorial
-
-**Title**: **[Filling the gap between the JavaScript language specification and tools using the JISET family](https://pldi22.sigplan.org/details/pldi-2022-tutorials/1/Filling-the-gap-between-the-JavaScript-language-specification-and-tools-using-the-JIS)**
-- Presenters: [Jihyeok Park](https://park.jihyeok.site/), [Seungmin An](https://github.com/h2oche), and [Sukyoung Ryu](https://plrg.kaist.ac.kr/ryu)
-- [Session 1](https://plrg.korea.ac.kr/assets/data/slides/2022/pldi22-tutorial-1.pdf)
-- [Session 2-1](https://plrg.korea.ac.kr/assets/data/slides/2022/pldi22-tutorial-2.pdf)
-- [Session 2-2](https://plrg.korea.ac.kr/assets/data/slides/2022/pldi22-tutorial-3.pdf)
-
-### Communications of the ACM (CACM)
-
-- **Title**: **[JavaScript Language Design and Implementation in Tandem](https://cacm.acm.org/research/javascript-language-design-and-implementation-in-tandem/)**
-  - DOI: [10.1145/3624723](https://doi.org/10.1145/3624723)
-
-See the following video for more details:
-
-<p align="center"><img src="http://img.youtube.com/vi/JGxc-KIUnQY/maxresdefault.jpg" width="500"></p>
-
-- link: [https://youtu.be/JGxc-KIUnQY](https://youtu.be/JGxc-KIUnQY)

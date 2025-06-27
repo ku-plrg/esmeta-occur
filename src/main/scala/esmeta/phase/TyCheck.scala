@@ -25,8 +25,7 @@ case object TyCheck extends Phase[CFG, Unit] {
       inferTypeGuard = !config.noRefine && config.inferTypeGuard,
       useBooleanGuard = !config.noRefine && config.useBooleanGuard,
       useProvenance = config.useProvenance,
-      useBasicSyntaxKill = config.useSyntacticKill >= 1,
-      useFullSyntaxKill = config.useSyntacticKill >= 2,
+      useSyntacticKill = config.useSyntacticKill,
       noRefine = config.noRefine,
       typeSens = config.typeSens,
       config = TyChecker.Config(),
@@ -96,7 +95,7 @@ case object TyCheck extends Phase[CFG, Unit] {
     ),
     (
       "syntactic-kill",
-      NumOption(_.useSyntacticKill = _),
+      BoolOption(_.useSyntacticKill = _),
       "use syntactic kill for type checking(as Kent's work).",
     ),
     (
@@ -122,7 +121,7 @@ case object TyCheck extends Phase[CFG, Unit] {
     var inferTypeGuard: Boolean = true,
     var useBooleanGuard: Boolean = false,
     var useProvenance: Boolean = false,
-    var useSyntacticKill: Int = 0,
+    var useSyntacticKill: Boolean = false,
     var noRefine: Boolean = false,
   )
 }

@@ -422,8 +422,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           given AbsState <- get
           tv <- transfer(expr)
           v =
-            if useFullSyntaxKill && np.canMakeSideEffect then AbsValue(tv.ty)
-            else if useBasicSyntaxKill && np.isMutable(x) then AbsValue(tv.ty)
+            if useSyntacticKill && np.canMakeSideEffect then AbsValue(tv.ty)
             else tv
           _ <- modify(_.update(x, v, refine = false))
         } yield ()
@@ -559,7 +558,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         guard <- if (inferTypeGuard) getTypeGuard(expr) else pure(TypeGuard())
         newV = if (inferTypeGuard) v.addGuard(guard) else v
       } yield
-        if (!useBasicSyntaxKill) newV
+        if (!useSyntacticKill) newV
         else newV.killMutable)(st)
       // No propagation if the result of the expression is bottom
       if (v.isBottom) (v, AbsState.Bot) else (v, newSt)
@@ -1331,7 +1330,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         case (v, i) => i -> v
       }.toMap
       val newV = instantiate(call, value, map)
-      if (inferTypeGuard && useBasicSyntaxKill)
+      if (inferTypeGuard && useSyntacticKill)
         newV.lift.killMutable(using callerNp)
       else if (inferTypeGuard) newV.lift
       else newV

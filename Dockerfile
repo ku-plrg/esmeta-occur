@@ -15,10 +15,12 @@ FROM eclipse-temurin:22-jre-alpine
 ENV ESMETA_HOME=/opt/esmeta
 WORKDIR $ESMETA_HOME
 
+RUN apk add --no-cache graphviz
+
 COPY --from=builder /app $ESMETA_HOME
 
 RUN chmod +x $ESMETA_HOME/bin/esmeta
 ENV PATH=$ESMETA_HOME/bin:$PATH
 
-ENTRYPOINT ["java", "-jar", "bin/esmeta"]
+ENTRYPOINT ["esmeta"]
 CMD ["help"]

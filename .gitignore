@@ -48,3 +48,5 @@ tests/result/test262
 # docker
 *.tar.gz
 *.tar
+
+result/

@@ -18,8 +18,7 @@ class TyChecker(
   val inferTypeGuard: Boolean = true,
   val useBooleanGuard: Boolean = false,
   val useProvenance: Boolean = false,
-  val useBasicSyntaxKill: Boolean = false,
-  val useFullSyntaxKill: Boolean = false,
+  val useSyntacticKill: Boolean = false,
   val noRefine: Boolean = false,
   val typeSens: Boolean = false,
   val config: TyChecker.Config = TyChecker.Config(),
@@ -109,8 +108,7 @@ class TyChecker(
             "typeSens" -> typeSens,
             "inferTypeGuard" -> inferTypeGuard,
             "useProvenance" -> useProvenance,
-            "useBaseSyntaxKill" -> useBasicSyntaxKill,
-            "useFullSyntaxKill" -> useFullSyntaxKill,
+            "useSyntacticKill" -> useSyntacticKill,
           ),
           "duration" -> f"${time}%,d ms",
           "error" -> errors.size,
@@ -280,7 +278,7 @@ class TyChecker(
             silent = silent,
           )
         }
-        if (useBasicSyntaxKill) {
+        if (useSyntacticKill) {
           dumpFile(
             name = "mutated locals",
             data = cfg.funcs
@@ -289,8 +287,6 @@ class TyChecker(
             filename = s"$ANALYZE_LOG_DIR/mutated",
             silent = silent,
           )
-        }
-        if (useFullSyntaxKill) {
           dumpFile(
             name = "impure functions",
             data = impureFuncs.map(_.name).toList.sorted.mkString(LINE_SEP),
@@ -422,9 +418,7 @@ class TyChecker(
       val (newLocals, symEnv) = (for {
         ((x, value), sym) <- idxLocals
       } yield {
-        if useFullSyntaxKill && callee.canMakeSideEffect then
-          (x -> AbsValue(STy(value.ty)), sym -> ValueTy.Bot)
-        else if useBasicSyntaxKill && callee.mutableLocals.contains(x) then
+        if useSyntacticKill && callee.canMakeSideEffect then
           (x -> AbsValue(STy(value.ty)), sym -> ValueTy.Bot)
         else (x -> AbsValue(SSym(sym)), sym -> value.ty)
       }).unzip

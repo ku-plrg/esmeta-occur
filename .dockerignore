@@ -11,5 +11,9 @@
 .cursorignorerules
 
 logs/
+result/
 target/
 tests/
+
+*.tar
+*.tar.gz
