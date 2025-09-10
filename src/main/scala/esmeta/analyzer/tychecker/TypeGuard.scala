@@ -346,7 +346,7 @@ trait TypeGuardDecl { self: TyChecker =>
       else if that == Top then true
       else // this and that are not Bot or Top
         (this, that) match
-          case (Leaf(lnode, _, lty), Leaf(rnode, _, rty)) =>
+          case (Leaf(lnode, _, lty, _), Leaf(rnode, _, rty, _)) =>
             if lty == rty then lnode == rnode
             else lty <= rty
           case (CallPath(lcall, lty, lchild), CallPath(rcall, rty, rchild)) =>
@@ -371,10 +371,11 @@ trait TypeGuardDecl { self: TyChecker =>
 
       // this and that are not subsumption of each other
       (this, that) match
-        case (Leaf(lnode, lbase, lty), Leaf(rnode, rbase, rty)) =>
+        case (Leaf(lnode, lbase, lty, ltruth), Leaf(rnode, rbase, rty, rtruth)) =>
           if lnode == rnode then
             val base = if (lbase == rbase) lbase else None
-            Leaf(lnode, base, lty || rty)
+            val truth = if (ltruth == rtruth) ltruth else None
+            Leaf(lnode, base, lty || rty, truth)
           else Join(Set(this, that)).canonical
         case (CallPath(lcall, lty, lchild), CallPath(rcall, rty, rchild)) =>
           if lcall == rcall then CallPath(lcall, lty || rty, lchild || rchild)
@@ -398,10 +399,11 @@ trait TypeGuardDecl { self: TyChecker =>
 
       // this and that are not subsumption of each other
       (this, that) match
-        case (Leaf(lnode, lbase, lty), Leaf(rnode, rbase, rty)) =>
+        case (Leaf(lnode, lbase, lty, ltruth), Leaf(rnode, rbase, rty, rtruth)) =>
           if lnode == rnode then
             val base = if (lbase == rbase) lbase else None
-            Leaf(lnode, base, lty && rty)
+            val truth = if (ltruth == rtruth) ltruth else None
+            Leaf(lnode, base, lty && rty, truth)
           else Meet(Set(this, that)).canonical
         case (CallPath(lcall, lty, lchild), CallPath(rcall, rty, rchild)) =>
           if lcall == rcall then CallPath(lcall, lty && rty, lchild && rchild)
@@ -507,7 +509,12 @@ trait TypeGuardDecl { self: TyChecker =>
   }
 
   // Leaf provenance: attach base and node to recover spec text later
-  case class Leaf(node: Node, base: Option[Base], ty: ValueTy) extends Provenance {
+  case class Leaf(
+    node: Node,
+    base: Option[Base],
+    ty: ValueTy,
+    truth: Option[Boolean] = None,
+  ) extends Provenance {
     def size: Int = 0
     def depth: Int = 0
     def leafCnt: Int = 1
@@ -591,11 +598,15 @@ trait TypeGuardDecl { self: TyChecker =>
 
     // Create a leaf provenance without base information
     def apply(ty: ValueTy)(using nd: Node): Provenance =
-      if useProvenance then Leaf(nd, None, ty) else Bot
+      if useProvenance then Leaf(nd, None, ty, None) else Bot
 
     // Overloaded constructor that requires a base
-    def apply(base: Base, ty: ValueTy)(using nd: Node): Provenance =
-      if useProvenance then Leaf(nd, Some(base), ty) else Bot
+    def apply(
+      base: Base,
+      ty: ValueTy,
+      truth: Option[Boolean] = None,
+    )(using nd: Node): Provenance =
+      if useProvenance then Leaf(nd, Some(base), ty, truth) else Bot
   }
   // -----------------------------------------------------------------------------
   // helpers
@@ -672,7 +683,7 @@ trait TypeGuardDecl { self: TyChecker =>
   object ProvPrinter {
     def getId(prov: Provenance): String =
       prov match
-        case Leaf(node, _, ty)          => norm(s"Leaf${node.id}")
+        case Leaf(node, _, ty, _)       => norm(s"Leaf${node.id}")
         case CallPath(call, ty, child)  => norm(s"call${call.id}")
         case Join(child)                => norm(s"join${child.hashCode()}")
         case Meet(child)                => norm(s"meet${child.hashCode()}")
@@ -708,7 +719,7 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def drawProvenanceNode(prov: Provenance)(using Appender): Unit =
       prov match
-        case p @ Leaf(node, _, ty) =>
+        case p @ Leaf(node, _, ty, _) =>
           drawNaming(getId(p), NODE_COLOR, node.name)
           drawNode(getId(p), "box", NODE_COLOR, BG_COLOR, Some(ty.toString))
         case p @ CallPath(call, ty, child) =>
@@ -859,13 +870,15 @@ trait TypeGuardDecl { self: TyChecker =>
           }.getOrElse(())
           render(app, child, depth + 1)
 
-        case Leaf(node, baseOpt, ty) =>
+        case Leaf(node, baseOpt, ty, truthOpt) =>
           val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<>")
-          val cond = specLine(node).flatMap(extractCond)
-          val because = cond.map(c => s" because `$c`").getOrElse("")
+          val line = specLine(node)
+          val cond = line.flatMap(extractCond).orElse(line.map(dropStepPrefix))
+          val suffix = truthOpt.map(b => if b then " is True" else " is False").getOrElse("")
+          val because = cond.map(c => s" because `$c`$suffix").getOrElse("")
           app :> s"${indent(depth)}* [ORIGIN] $baseStr is ${showTy(ty)}$because"
           // spec comment
-          specLine(node).map { line =>
+          line.map { line =>
             app :> s"${indent(depth)}// $line"
           }.getOrElse(())
 
@@ -883,10 +896,14 @@ trait TypeGuardDecl { self: TyChecker =>
 
     private def oneLine(s: String): String =
       s.replace("\r", " ").replace("\n", " ").trim
+    private def dropStepPrefix(s: String): String =
+      s.indexOf(". ") match
+        case -1 => s
+        case i  => s.substring(i + 2)
 
     // Try to extract the condition from an "If <cond>, ..." line
     private def extractCond(s: String): Option[String] =
-      val IfCond = "(?is).*?If\\s+(.+?)(?:,\\s*(?:then|return)|\\.).".r
+      val IfCond = "(?is).*?If\\s+(.+?)(?:,\\s*(?:then|return)|\\.)".r
       s match
         case IfCond(cond) => Some(cond.trim)
         case _            => None

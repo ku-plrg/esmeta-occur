@@ -867,13 +867,13 @@ trait AbsTransferDecl { analyzer: TyChecker =>
             toSymRef(l, lv).map { ref =>
               aux(lty, rty, true, true).map { thenTy =>
                 if (lty != thenTy && !thenTy.isBottom)
-                  toBase(ref -> thenTy, np).map { pair =>
+                  toBase(ref -> thenTy, np, Some(true)).map { pair =>
                     lmap += DemandType(TrueT) -> TypeConstr(pair).lift
                   }
               }
               aux(lty, rty, false, true).map { elseTy =>
                 if (lty != elseTy && !elseTy.isBottom)
-                  toBase(ref -> elseTy, np).map { pair =>
+                  toBase(ref -> elseTy, np, Some(false)).map { pair =>
                     lmap += DemandType(FalseT) -> TypeConstr(pair).lift
                   }
               }
@@ -882,13 +882,13 @@ trait AbsTransferDecl { analyzer: TyChecker =>
             toSymRef(r, rv).map { ref =>
               aux(rty, lty, true, false).map { thenTy =>
                 if (rty != thenTy && !thenTy.isBottom)
-                  toBase(ref -> thenTy, np).map { pair =>
+                  toBase(ref -> thenTy, np, Some(true)).map { pair =>
                     rmap += DemandType(TrueT) -> TypeConstr(pair).lift
                   }
               }
               aux(rty, lty, false, false).map { elseTy =>
                 if (rty != elseTy && !elseTy.isBottom)
-                  toBase(ref -> elseTy, np).map { pair =>
+                  toBase(ref -> elseTy, np, Some(false)).map { pair =>
                     rmap += DemandType(FalseT) -> TypeConstr(pair).lift
                   }
               }
@@ -921,12 +921,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
             toSymRef(ref, lv).map { ref =>
               if (thenTy.isBottom) bools -= true
               else
-                toBase(ref -> thenTy, np).map { pair =>
+                toBase(ref -> thenTy, np, Some(true)).map { pair =>
                   guard += DemandType(TrueT) -> TypeConstr(pair).lift
                 }
               if (elseTy.isBottom) bools -= false
               else
-                toBase(ref -> elseTy, np).map { pair =>
+                toBase(ref -> elseTy, np, Some(false)).map { pair =>
                   guard += DemandType(FalseT) -> TypeConstr(pair).lift
                 }
             }
@@ -947,13 +947,13 @@ trait AbsTransferDecl { analyzer: TyChecker =>
               if (lty != thenTy)
                 if (thenTy.isBottom) bools -= true
                 else
-                  toBase(ref -> thenTy, np).map { pair =>
+                  toBase(ref -> thenTy, np, Some(true)).map { pair =>
                     guard += DemandType(TrueT) -> TypeConstr(pair).lift
                   }
               if (lty != elseTy)
                 if (elseTy.isBottom) bools -= false
                 else
-                  toBase(ref -> elseTy, np).map { pair =>
+                  toBase(ref -> elseTy, np, Some(false)).map { pair =>
                     guard += DemandType(FalseT) -> TypeConstr(pair).lift
                   }
             }
@@ -978,13 +978,13 @@ trait AbsTransferDecl { analyzer: TyChecker =>
               if (lty != thenTy)
                 if (thenTy.isBottom) bools -= true
                 else
-                  toBase(ref -> thenTy, np).map { pair =>
+                  toBase(ref -> thenTy, np, Some(true)).map { pair =>
                     guard += DemandType(TrueT) -> TypeConstr(pair).lift
                   }
               if (lty != elseTy)
                 if (elseTy.isBottom) bools -= false
                 else
-                  toBase(ref -> elseTy, np).map { pair =>
+                  toBase(ref -> elseTy, np, Some(false)).map { pair =>
                     guard += DemandType(FalseT) -> TypeConstr(pair).lift
                   }
             }
@@ -1046,13 +1046,13 @@ trait AbsTransferDecl { analyzer: TyChecker =>
               if (lty != thenTy)
                 if (thenTy.isBottom) bools -= true
                 else
-                  toBase(ref -> thenTy, np).map { pair =>
+                  toBase(ref -> thenTy, np, Some(true)).map { pair =>
                     guard += DemandType(TrueT) -> TypeConstr(pair).lift
                   }
               if (lty != elseTy)
                 if (elseTy.isBottom) bools -= false
                 else
-                  toBase(ref -> elseTy, np).map { pair =>
+                  toBase(ref -> elseTy, np, Some(false)).map { pair =>
                     guard += DemandType(FalseT) -> TypeConstr(pair).lift
                   }
             }
@@ -1621,11 +1621,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
     def toBase(
       pair: (SymRef, ValueTy),
       np: NodePoint[?],
+      truth: Option[Boolean] = None,
     )(using
       st: AbsState,
     ): Option[(Base, (ValueTy, Provenance))] =
       toBase(pair).map { (base, ty) =>
-        base -> (ty, Provenance(base, ty)(using np.node))
+        base -> (ty, Provenance(base, ty, truth)(using np.node))
       }
 
     def toBase(
