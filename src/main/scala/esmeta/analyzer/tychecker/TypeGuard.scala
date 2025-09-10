@@ -886,38 +886,30 @@ trait TypeGuardDecl { self: TyChecker =>
           app :> head
           // Print spec excerpt as a comment
           specLine(target.node).map { line =>
-            app :> s"${indent(depth)}// $line"
+            app :> s"${indent(depth)}  // $line"
           }.getOrElse(())
           // Pass base context down so Meet can show concise summaries
           render(app, child, depth, baseOpt.map(b => (target.node, b)))
 
         case Meet(children) =>
           app :> s"${indent(depth)}All the following statements hold:"
-          // Interleave summary bullets with each corresponding child rendering,
-          // so bullets appear right after the header and before each call block.
-          val ordered = children.toList
-          ordered.foreach { child =>
-            baseCtx.foreach { (nd, base) =>
-              (child: @unchecked) match
-                case cp @ CallPath(call, cty, _) =>
-                  cp.truthOpt.foreach { b =>
-                    val baseStr = s"`${prettyBase(base, nd)}`"
-                    val truthWord = if b then "True" else "False"
-                    app :> s"${indent(depth)}* $baseStr is ${showTy(cty)} because `${callSig(call)}` is $truthWord"
-                    specLine(call).map { line =>
-                      app :> s"${indent(depth)}// $line"
-                    }.getOrElse(())
-                  }
-                case _ => ()
-            }
-            render(app, child, depth, baseCtx)
-          }
+          children.toList.foreach(render(app, _, depth, baseCtx))
 
         case Join(children) =>
           app :> s"${indent(depth)}Either of the following statements hold:"
           children.toList.foreach(render(app, _, depth, baseCtx))
 
-        case CallPath(call, _, child) =>
+        case cp @ CallPath(call, cty, child) =>
+          baseCtx.foreach { (nd, base) =>
+            cp.truthOpt.foreach { b =>
+              val baseStr = s"`${prettyBase(base, nd)}`"
+              val truthWord = if b then "True" else "False"
+              app :> s"${indent(depth)}* $baseStr is ${showTy(cty)} because `${callSig(call)}` is $truthWord"
+              specLine(call).map { line =>
+                app :> s"${indent(depth)}  // $line"
+              }.getOrElse(())
+            }
+          }
           val callLine = callSig(call)
           app :> s"${indent(depth)}  $callLine"
           render(app, child, depth + 1, baseCtx)
@@ -925,13 +917,14 @@ trait TypeGuardDecl { self: TyChecker =>
         case Leaf(node, baseOpt, ty, truthOpt) =>
           val baseStr = baseOpt.map(b => s"`${prettyBase(b, node)}`").getOrElse("<>")
           val line = specLine(node)
-          val cond = line.flatMap(extractCond).orElse(line.map(dropStepPrefix))
+          val reason = originSnippet(node)
+            .orElse(line.flatMap(extractCond).orElse(line.map(dropStepPrefix)))
           val suffix = truthOpt.map(b => if b then " is True" else " is False").getOrElse("")
-          val because = cond.map(c => s" because `$c`$suffix").getOrElse("")
+          val because = reason.map(c => s" because `$c`$suffix").getOrElse("")
           app :> s"${indent(depth)}* [ORIGIN] $baseStr is ${showTy(ty)}$because"
           // spec comment
           line.map { line =>
-            app :> s"${indent(depth)}// $line"
+            app :> s"${indent(depth)}  // $line"
           }.getOrElse(())
 
         case _ => ()
@@ -947,6 +940,12 @@ trait TypeGuardDecl { self: TyChecker =>
       code <- algoCode(func)
       line <- findStepFullLine(code, loc)
     } yield line
+
+    private def originSnippet(node: Node): Option[String] = for {
+      loc <- node.loc
+      func = cfg.funcOf(node)
+      code <- algoCode(func)
+    } yield oneLine(loc.getString(code))
 
     private def findStepFullLine(code: String, loc: esmeta.util.Loc): Option[String] =
       val prefix = s"${loc.stepString}. "
