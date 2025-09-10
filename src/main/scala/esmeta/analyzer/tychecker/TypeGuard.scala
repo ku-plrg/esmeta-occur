@@ -960,7 +960,8 @@ trait TypeGuardDecl { self: TyChecker =>
         found = code.indexOf(prefix, from)
       // if none found before, fallback to first occurrence
       if idx == -1 then idx = code.indexOf(prefix)
-      if idx == -1 then Some(s"${loc.stepString}. ${oneLine(loc.getString(code))}")
+      if idx == -1 then
+        Some(oneLine(replaceStepPrefix(loc.getLine(code), loc.stepString)))
       else
         val lineStart = code.lastIndexOf('\n', idx) match
           case -1 => 0
@@ -968,7 +969,20 @@ trait TypeGuardDecl { self: TyChecker =>
         val lineEnd = code.indexOf('\n', idx) match
           case -1 => code.length
           case j  => j
-        Some(oneLine(code.substring(lineStart, lineEnd)))
+        val raw = code.substring(lineStart, lineEnd)
+        Some(oneLine(replaceStepPrefix(raw, loc.stepString)))
+
+    // Replace the fixed step number at the beginning (e.g., "1. ") with the
+    // actual step from loc.stepString. We use only the major numeric part
+    // (e.g., "3" for "3.ii.c") to match expected formatting.
+    private def replaceStepPrefix(line: String, stepStr: String): String =
+      val major = stepStr.takeWhile(_.isDigit) match
+        case s if s.nonEmpty => s
+        case _               => stepStr
+      val StepNum = "^(\\s*)(\\d+)(\\.\\s+)(.*)$".r
+      line match
+        case StepNum(ws, _, dotSpace, rest) => s"$ws$major$dotSpace$rest"
+        case _                               => line
 
     private def oneLine(s: String): String =
       s.replace("\r", " ").replace("\n", " ").trim

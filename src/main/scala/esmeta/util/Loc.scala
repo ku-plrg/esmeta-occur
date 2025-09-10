@@ -45,6 +45,21 @@ case class Loc(
   /** get the string from the original string */
   def getString(str: String): String = str.substring(start.offset, end.offset)
 
+  /** get the full line at the start position from the original string */
+  def getLine(str: String): String =
+    if (str.isEmpty) return ""
+    val off =
+      if (start.offset < 0) 0
+      else if (start.offset >= str.length) str.length - 1
+      else start.offset
+    val lineStart = str.lastIndexOf('\n', off) match
+      case -1 => 0
+      case i  => i + 1
+    val lineEnd = str.indexOf('\n', off) match
+      case -1 => str.length
+      case j  => j
+    str.substring(lineStart, lineEnd).replace("\r", "")
+
   /** get range string */
   def rangeString: String = s"$start-$end"
 
