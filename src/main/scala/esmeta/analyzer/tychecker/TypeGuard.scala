@@ -352,7 +352,7 @@ trait TypeGuardDecl { self: TyChecker =>
         if (ts.isEmpty) None
         else if (ts.forall(_ == ts.head)) Some(ts.head) else None
       case RefinePoint(_, child, _, _, _, _) => child.truthOpt
-      case Bot | Top => None
+      case Provenance.Bot | Provenance.Top => None
 
     // simple explanation is bigger (imprecise)
     def <=(that: Provenance): Boolean = {
@@ -848,6 +848,7 @@ trait TypeGuardDecl { self: TyChecker =>
       case Meet(children) =>
         val seqs = children.toList.flatMap(stepSeqOf)
         if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
+      case Provenance.Bot | Provenance.Top => None
     private def stepsCode(steps: List[Int]): BigInt =
       steps.foldLeft(BigInt(0))((acc, s) => acc * 1000 + BigInt(s))
     private def stepRankOf(prov: Provenance): BigInt =
@@ -955,18 +956,37 @@ trait TypeGuardDecl { self: TyChecker =>
       cfg.spec.fnameMap.get(func.irFunc.name).map(_.code)
         .orElse(func.irFunc.algo.map(_.code))
 
+    // Remove ecmarkup decorations (e.g., [id="..."], <emu-...> wrappers) while preserving inner text
+    private def sanitizeSpec(s: String): String =
+      var t = s
+      // Remove bracketed id labels like [id="..."]
+      t = t.replaceAll("""\s*\[id\s*=\s*(['"]).*?\1\s*]""", "")
+      // Unwrap <emu-...>...</emu-...> while keeping inner text
+      t = t.replaceAll(
+        """<emu-[A-Za-z0-9\-]+(?:\s[^>]*?)?>(.*?)</emu-[A-Za-z0-9\-]+>""",
+        "$1",
+      )
+      // Remove self-closing or stray emu tags
+      t = t.replaceAll("""<emu-[A-Za-z0-9\-]+(?:\s[^>]*?)?/>""", "")
+      t = t.replaceAll("""</?emu-[A-Za-z0-9\-]+(?:\s[^>]*?)?>""", "")
+      // Remove empty references like "(see )" possibly left by empty xrefs
+      t = t.replaceAll("""\(\s*see\s*\)""", "")
+      // Normalize whitespace and punctuation spacing
+      t = t.replaceAll("""\s+([.,;:])""", "$1").replaceAll("""\s+""", " ").trim
+      t
+
     private def specLine(node: Node): Option[String] = for {
       loc <- node.loc
       func = cfg.funcOf(node)
       code <- algoCode(func)
       line <- loc.findStepFullLine(code)
-    } yield line
+    } yield sanitizeSpec(line)
 
     private def originSnippet(node: Node): Option[String] = for {
       loc <- node.loc
       func = cfg.funcOf(node)
       code <- algoCode(func)
-    } yield Loc.oneLine(loc.getString(code))
+    } yield sanitizeSpec(Loc.oneLine(loc.getString(code)))
 
     
 
