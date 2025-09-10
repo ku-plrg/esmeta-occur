@@ -14,6 +14,9 @@ trait AbsTransferDecl { analyzer: TyChecker =>
   /** abstract transfer function */
   class AbsTransfer extends AbsTransferLike {
 
+    // Current refinement context: used so notice() can attach branch info.
+    private var currentTarget: Option[RefinementTarget] = None
+
     /** loading monads */
     import monad.*
 
@@ -97,8 +100,9 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         constr.map.get(x) match
           // local variable is directly refined
           case Some((bty, prov)) if ty != bty =>
+            // Attach refined variable type for header display.
             provenances += (target, x, refinedTo) -> prov
-              .usedForRefine(target, x, refinedTo)
+              .usedForRefine(target, x, refinedTo, refinedTy)
           case _ => ()
       }
 
@@ -114,8 +118,9 @@ trait AbsTransferDecl { analyzer: TyChecker =>
             refinedSt.locals.foreach { (local, v) =>
               // local variable is indirectly refined
               if st.get(local).symty.bases.contains(x) then
+                val localRefinedTy = refinedSt.get(local).ty(using refinedSt)
                 provenances += (target, local, refinedTo) -> prov
-                  .usedForRefine(target, local, refinedTo)
+                  .usedForRefine(target, local, refinedTo, localRefinedTy)
             }
           case _ => ()
       }
@@ -1528,7 +1533,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           if refined <= dty.ty
         } yield
           if (detail)
-            refineWithLog(RefinementTarget.NodeTarget(np.node), constr, refined)
+            // Prefer branch/assert target when available for clearer provenance.
+            refineWithLog(
+              currentTarget.getOrElse(RefinementTarget.NodeTarget(np.node)),
+              constr,
+              refined,
+            )
           else refine(constr),
       )
 
@@ -1537,12 +1547,16 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       constr: TypeConstr,
       refinedTo: ValueTy,
     )(using np: NodePoint[_]): Updater =
+      // Ensure nested notice() calls see this target.
+      val saved = currentTarget
+      currentTarget = Some(target)
       for {
         st <- get
         _ <- refine(constr)
         refinedSt <- get
       } yield {
         logProvenance(target, constr, st, refinedSt, refinedTo)
+        currentTarget = saved
       }
 
     /** refine types using type constraints */

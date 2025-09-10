@@ -488,11 +488,19 @@ trait TypeGuardDecl { self: TyChecker =>
       target: RefinementTarget,
       base: Base,
       refinedTo: ValueTy,
+      refinedVarTy: ValueTy,
     ): Provenance =
       val branch: Option[Boolean] = target match
         case RefinementTarget.BranchTarget(_, isTrue) => Some(isTrue)
         case _                                        => None
-      RefinePoint(target, this, Some(base), branch, Some(refinedTo))
+      RefinePoint(
+        target = target,
+        child = this,
+        base = Some(base),
+        branch = branch,
+        refined = Some(refinedTo),
+        varRefined = Some(refinedVarTy),
+      )
 
     def toTree(indent: Int): String
     def toTree: String = toTree(0)
@@ -547,7 +555,8 @@ trait TypeGuardDecl { self: TyChecker =>
     child: Provenance,
     base: Option[Base] = None,
     branch: Option[Boolean] = None,
-    refined: Option[ValueTy] = None,
+    refined: Option[ValueTy] = None,      // e.g., True/False for branch condition
+    varRefined: Option[ValueTy] = None,   // refined variable type to show in header
   )
     extends Provenance {
     lazy val ty: ValueTy = child.ty
@@ -667,7 +676,7 @@ trait TypeGuardDecl { self: TyChecker =>
         case CallPath(call, ty, child)  => norm(s"call${call.id}")
         case Join(child)                => norm(s"join${child.hashCode()}")
         case Meet(child)                => norm(s"meet${child.hashCode()}")
-        case RefinePoint(target, _, _, _, _) => norm(s"refine${target.node.id}")
+        case RefinePoint(target, _, _, _, _, _) => norm(s"refine${target.node.id}")
         case Provenance.Bot             => ???
         case Provenance.Top             => ???
 
@@ -694,7 +703,7 @@ trait TypeGuardDecl { self: TyChecker =>
           child.foreach(drawProvenance)
         case Meet(child) =>
           child.foreach(drawProvenance)
-        case RefinePoint(target, child, _, _, _) => drawProvenance(child)
+        case RefinePoint(target, child, _, _, _, _) => drawProvenance(child)
         case _                          => ()
 
     def drawProvenanceNode(prov: Provenance)(using Appender): Unit =
@@ -728,7 +737,7 @@ trait TypeGuardDecl { self: TyChecker =>
           child.foreach { c =>
             drawEdge(getId(p), getId(c), EDGE_COLOR, None)
           }
-        case p @ RefinePoint(target, child, _, _, _) =>
+        case p @ RefinePoint(target, child, _, _, _, _) =>
           drawNode(
             getId(p),
             "hexagon",
@@ -793,6 +802,10 @@ trait TypeGuardDecl { self: TyChecker =>
     import Provenance.*
     import RefinementTarget.*
 
+    private def humanizeRecordNames(s: String): String =
+      s.replaceAll("""\bRecord\[([A-Za-z0-9_]+)\]""", "$1")
+    private def showTy(ty: ValueTy): String = humanizeRecordNames(ty.toString)
+
     def print(app: Appender, prov: Provenance): Appender =
       prov match
         case rp: RefinePoint =>
@@ -809,9 +822,12 @@ trait TypeGuardDecl { self: TyChecker =>
 
     private def render(app: Appender, prov: Provenance, depth: Int): Unit =
       prov match
-        case RefinePoint(target, child, baseOpt, branchOpt, refinedOpt) =>
-          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<?>")
-          val refinedStr = refinedOpt.fold(child.ty.toString)(_.toString)
+        case RefinePoint(target, child, baseOpt, branchOpt, refinedOpt, varRefinedOpt) =>
+          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<>")
+          val refinedStr =
+            varRefinedOpt
+              .orElse(refinedOpt)
+              .fold(showTy(child.ty))(showTy)
           val branchStr = branchOpt.map(b => if b then "true" else "false")
           val stepStr = target.node.loc.map(_.stepString)
           val head =
@@ -844,10 +860,10 @@ trait TypeGuardDecl { self: TyChecker =>
           render(app, child, depth + 1)
 
         case Leaf(node, baseOpt, ty) =>
-          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<?>")
+          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<>")
           val cond = specLine(node).flatMap(extractCond)
           val because = cond.map(c => s" because `$c`").getOrElse("")
-          app :> s"${indent(depth)}* [ORIGIN] $baseStr is $ty$because"
+          app :> s"${indent(depth)}* [ORIGIN] $baseStr is ${showTy(ty)}$because"
           // spec comment
           specLine(node).map { line =>
             app :> s"${indent(depth)}// $line"
@@ -870,7 +886,7 @@ trait TypeGuardDecl { self: TyChecker =>
 
     // Try to extract the condition from an "If <cond>, ..." line
     private def extractCond(s: String): Option[String] =
-      val IfCond = "(?is).*?If\\s+(.+?)(?:,\\s*(?:then|return)|\\.)".r
+      val IfCond = "(?is).*?If\\s+(.+?)(?:,\\s*(?:then|return)|\\.).".r
       s match
         case IfCond(cond) => Some(cond.trim)
         case _            => None
@@ -879,7 +895,12 @@ trait TypeGuardDecl { self: TyChecker =>
     private def callSig(call: Call): String = call.callInst match
       case ICall(_, fexpr, args) =>
         val as = args.map(_.toString).mkString(", ")
-        s"${fexpr.toString} ( $as )"
+        // Prefer readable function name for closures/continuations
+        val fname = fexpr match
+          case EClo(fn, _) => fn
+          case ECont(fn)   => fn
+          case _           => fexpr.toString
+        s"$fname ( $as )"
       case ISdoCall(_, base, method, args) =>
         val as = (base :: args).map(_.toString).mkString(", ")
         s"$method ( $as )"
