@@ -487,11 +487,12 @@ trait TypeGuardDecl { self: TyChecker =>
     def usedForRefine(
       target: RefinementTarget,
       base: Base,
+      refinedTo: ValueTy,
     ): Provenance =
       val branch: Option[Boolean] = target match
         case RefinementTarget.BranchTarget(_, isTrue) => Some(isTrue)
         case _                                        => None
-      RefinePoint(target, this, Some(base), branch)
+      RefinePoint(target, this, Some(base), branch, Some(refinedTo))
 
     def toTree(indent: Int): String
     def toTree: String = toTree(0)
@@ -546,6 +547,7 @@ trait TypeGuardDecl { self: TyChecker =>
     child: Provenance,
     base: Option[Base] = None,
     branch: Option[Boolean] = None,
+    refined: Option[ValueTy] = None,
   )
     extends Provenance {
     lazy val ty: ValueTy = child.ty
@@ -615,10 +617,9 @@ trait TypeGuardDecl { self: TyChecker =>
   // case SENot(expr) =>
   //   app >> "(! " >> expr >> ")"
 
-  /** Provenance */
+  /** Provenance pretty printer (spec-like) */
   given Rule[Provenance] = (app, prov) =>
-    import Provenance.*
-    if useProvenance then app >> prov.toTree else app
+    ProvTextPrinter.print(app, prov)
 
   /** TypeConstr */
   given Rule[TypeConstr] = (app, constr) =>
@@ -666,7 +667,7 @@ trait TypeGuardDecl { self: TyChecker =>
         case CallPath(call, ty, child)  => norm(s"call${call.id}")
         case Join(child)                => norm(s"join${child.hashCode()}")
         case Meet(child)                => norm(s"meet${child.hashCode()}")
-        case RefinePoint(target, _, _, _) => norm(s"refine${target.node.id}")
+        case RefinePoint(target, _, _, _, _) => norm(s"refine${target.node.id}")
         case Provenance.Bot             => ???
         case Provenance.Top             => ???
 
@@ -693,7 +694,7 @@ trait TypeGuardDecl { self: TyChecker =>
           child.foreach(drawProvenance)
         case Meet(child) =>
           child.foreach(drawProvenance)
-        case RefinePoint(target, child, _, _) => drawProvenance(child)
+        case RefinePoint(target, child, _, _, _) => drawProvenance(child)
         case _                          => ()
 
     def drawProvenanceNode(prov: Provenance)(using Appender): Unit =
@@ -727,7 +728,7 @@ trait TypeGuardDecl { self: TyChecker =>
           child.foreach { c =>
             drawEdge(getId(p), getId(c), EDGE_COLOR, None)
           }
-        case p @ RefinePoint(target, child, _, _) =>
+        case p @ RefinePoint(target, child, _, _, _) =>
           drawNode(
             getId(p),
             "hexagon",
@@ -783,5 +784,104 @@ trait TypeGuardDecl { self: TyChecker =>
       (inst, idx) <- insts.zipWithIndex
       str = norm(inst)
     } yield s"""[$idx] $str<BR ALIGN="LEFT"/>""").mkString
+  }
+
+  // ---------------------------------------------------------------------------
+  // Provenance Text Printer
+  // ---------------------------------------------------------------------------
+  object ProvTextPrinter {
+    import Provenance.*
+    import RefinementTarget.*
+
+    def print(app: Appender, prov: Provenance): Appender =
+      prov match
+        case rp: RefinePoint =>
+          val func = cfg.funcOf(rp.target.node)
+          val params = func.irFunc.params.map(_.lhs.toString).mkString(", ")
+          app :> s"${func.irFunc.name} ( $params )"
+          render(app, prov, 1)
+        case _ =>
+          // Unexpected, but render without header to be robust
+          render(app, prov, 0)
+      app
+
+    private def indent(depth: Int): String = if depth <= 0 then "" else ("| " * depth)
+
+    private def render(app: Appender, prov: Provenance, depth: Int): Unit =
+      prov match
+        case RefinePoint(target, child, baseOpt, branchOpt, refinedOpt) =>
+          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<?>")
+          val refinedStr = refinedOpt.fold(child.ty.toString)(_.toString)
+          val branchStr = branchOpt.map(b => if b then "true" else "false")
+          val stepStr = target.node.loc.map(_.stepString)
+          val head =
+            (indent(depth) + s"$baseStr is $refinedStr" +
+              stepStr
+                .map(s => s" in the ${branchStr.getOrElse("?")} branch of step $s")
+                .getOrElse(""))
+          app :> head
+          // Print spec excerpt as a comment
+          specLine(target.node).map { line =>
+            app :> s"${indent(depth)}// $line"
+          }.getOrElse(())
+          render(app, child, depth)
+
+        case Meet(children) =>
+          app :> s"${indent(depth)}All the following statements hold:"
+          children.toList.foreach(render(app, _, depth))
+
+        case Join(children) =>
+          app :> s"${indent(depth)}Either of the following statements hold:"
+          children.toList.foreach(render(app, _, depth))
+
+        case CallPath(call, _, child) =>
+          val callLine = callSig(call)
+          app :> s"${indent(depth)}  $callLine"
+          // Also show the corresponding spec line for the call
+          specLine(call).map { line =>
+            app :> s"${indent(depth)}// $line"
+          }.getOrElse(())
+          render(app, child, depth + 1)
+
+        case Leaf(node, baseOpt, ty) =>
+          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<?>")
+          val cond = specLine(node).flatMap(extractCond)
+          val because = cond.map(c => s" because `$c`").getOrElse("")
+          app :> s"${indent(depth)}* [ORIGIN] $baseStr is $ty$because"
+          // spec comment
+          specLine(node).map { line =>
+            app :> s"${indent(depth)}// $line"
+          }.getOrElse(())
+
+        case _ => ()
+
+    private def algoCode(func: Func): Option[String] =
+      func.irFunc.algo.map(_.code)
+        .orElse(cfg.spec.fnameMap.get(func.irFunc.name).map(_.code))
+
+    private def specLine(node: Node): Option[String] = for {
+      loc <- node.loc
+      func = cfg.funcOf(node)
+      code <- algoCode(func)
+    } yield s"${loc.stepString}. ${oneLine(loc.getString(code))}"
+
+    private def oneLine(s: String): String =
+      s.replace("\r", " ").replace("\n", " ").trim
+
+    // Try to extract the condition from an "If <cond>, ..." line
+    private def extractCond(s: String): Option[String] =
+      val IfCond = "(?is).*?If\\s+(.+?)(?:,\\s*(?:then|return)|\\.)".r
+      s match
+        case IfCond(cond) => Some(cond.trim)
+        case _            => None
+
+    // Show a concise call signature from a call node
+    private def callSig(call: Call): String = call.callInst match
+      case ICall(_, fexpr, args) =>
+        val as = args.map(_.toString).mkString(", ")
+        s"${fexpr.toString} ( $as )"
+      case ISdoCall(_, base, method, args) =>
+        val as = (base :: args).map(_.toString).mkString(", ")
+        s"$method ( $as )"
   }
 }

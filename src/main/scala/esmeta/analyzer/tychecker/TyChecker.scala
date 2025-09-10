@@ -271,16 +271,13 @@ class TyChecker(
             m: Map[(RefinementTarget, Base, ValueTy), Provenance],
           ): String =
             given Rule[Map[(RefinementTarget, Base, ValueTy), Provenance]] =
-              import SymTy.given, TypeGuard.given, ValueTy.given
               (app, refined) =>
                 val sorted = refined.toList.sortBy { (t, _) =>
                   (t._1.node.id, t._3.toString())
                 }
-                for (((target, base, ty), prov) <- sorted)
-                  app >> target >> "["
-                  app >> base >> "]"
-                  app >> ": " >> ty
-                  app >> "->" >> LINE_SEP >> prov
+                // Print only the provenance blocks, omitting the header line
+                for (((_, _, _), prov) <- sorted)
+                  app >> prov
                   app >> LINE_SEP
                 app
             (new Appender >> m).toString
@@ -364,20 +361,16 @@ class TyChecker(
   def provAvgDepth = provenances.values.map(_.depth).sum.toDouble / provCnt
   def provAvgLeaf = provenances.values.map(_.leafCnt).sum.toDouble / provCnt
   def provString: String =
-    given Rule[Map[(RefinementTarget, Base, ValueTy), Provenance]] =
-      import SymTy.given, TypeGuard.given, ValueTy.given
-      (app, refined) =>
-        val sorted = refined.toList.sortBy { (t, _) =>
-          (t._1.func, t._1.node.id, t._3.toString())
-        }
-        for (((target, base, ty), prov) <- sorted)
-          app >> target >> "["
-          app >> base >> "]"
-          app >> ": " >> ty
-          app >> "->" >> LINE_SEP >> prov
-          app >> LINE_SEP
-        app
-    (new Appender >> provenances).toString
+    // Pretty print each provenance entry as a self-contained block
+    val app = new Appender
+    val entries = provenances.toList.sortBy { case ((t, _, ty), _) =>
+      (t.func, t.node.id, ty.toString())
+    }
+    for (((_, _, _), prov) <- entries) {
+      app >> prov
+      app >> LINE_SEP
+    }
+    app.toString
   def provList = provenances.values.toList
   def sizeAndDepth = provList
     .map(p => (p.size, p.depth))

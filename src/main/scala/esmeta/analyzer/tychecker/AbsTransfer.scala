@@ -97,10 +97,8 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         constr.map.get(x) match
           // local variable is directly refined
           case Some((bty, prov)) if ty != bty =>
-            provenances += (target, x, refinedTo) -> prov.usedForRefine(
-              target,
-              x,
-            )
+            provenances += (target, x, refinedTo) -> prov
+              .usedForRefine(target, x, refinedTo)
           case _ => ()
       }
 
@@ -117,7 +115,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
               // local variable is indirectly refined
               if st.get(local).symty.bases.contains(x) then
                 provenances += (target, local, refinedTo) -> prov
-                  .usedForRefine(target, local)
+                  .usedForRefine(target, local, refinedTo)
             }
           case _ => ()
       }
