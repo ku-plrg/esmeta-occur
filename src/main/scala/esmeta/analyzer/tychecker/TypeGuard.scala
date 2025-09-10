@@ -338,6 +338,22 @@ trait TypeGuardDecl { self: TyChecker =>
     def depth: Int
     def leafCnt: Int
 
+    // Infer a consistent boolean truth value from leaves, when available.
+    // Returns Some(true/false) only if all annotated leaves agree; otherwise None.
+    final def truthOpt: Option[Boolean] = this match
+      case Leaf(_, _, _, truth) => truth
+      case CallPath(_, _, child) => child.truthOpt
+      case Join(children) =>
+        val ts = children.flatMap(_.truthOpt)
+        if (ts.isEmpty) None
+        else if (ts.forall(_ == ts.head)) Some(ts.head) else None
+      case Meet(children) =>
+        val ts = children.flatMap(_.truthOpt)
+        if (ts.isEmpty) None
+        else if (ts.forall(_ == ts.head)) Some(ts.head) else None
+      case RefinePoint(_, child, _, _, _, _) => child.truthOpt
+      case Bot | Top => None
+
     // simple explanation is bigger (imprecise)
     def <=(that: Provenance): Boolean = {
       if this == Bot then true
@@ -812,6 +828,7 @@ trait TypeGuardDecl { self: TyChecker =>
   object ProvTextPrinter {
     import Provenance.*
     import RefinementTarget.*
+    import SymTy.*
 
     private def humanizeRecordNames(s: String): String =
       s.replaceAll("""\bRecord\[([A-Za-z0-9_]+)\]""", "$1")
@@ -831,10 +848,30 @@ trait TypeGuardDecl { self: TyChecker =>
 
     private def indent(depth: Int): String = if depth <= 0 then "" else ("| " * depth)
 
-    private def render(app: Appender, prov: Provenance, depth: Int): Unit =
+    private def prettyBase(base: Base, node: Node): String = base match
+      case x: Local => x.toString
+      case s: Sym =>
+        val func = cfg.funcOf(node)
+        val entrySt = getResult(NodePoint(func, func.entry, emptyView))
+        val opt = entrySt.locals.collectFirst {
+          case (lx, v) if v.symty match
+              case SSym(ss) if ss == s => true
+              case _                   => false
+          => lx
+        }
+        opt.map(_.toString).getOrElse("#" + s.toString)
+
+    // Optionally carry header (node, base) to render concise summaries
+    // inside conjunction blocks.
+    private def render(
+      app: Appender,
+      prov: Provenance,
+      depth: Int,
+      baseCtx: Option[(Node, Base)] = None,
+    ): Unit =
       prov match
         case RefinePoint(target, child, baseOpt, branchOpt, refinedOpt, varRefinedOpt) =>
-          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<>")
+          val baseStr = baseOpt.map(b => s"`${prettyBase(b, target.node)}`").getOrElse("<>")
           val refinedStr =
             varRefinedOpt
               .orElse(refinedOpt)
@@ -851,27 +888,42 @@ trait TypeGuardDecl { self: TyChecker =>
           specLine(target.node).map { line =>
             app :> s"${indent(depth)}// $line"
           }.getOrElse(())
-          render(app, child, depth)
+          // Pass base context down so Meet can show concise summaries
+          render(app, child, depth, baseOpt.map(b => (target.node, b)))
 
         case Meet(children) =>
           app :> s"${indent(depth)}All the following statements hold:"
-          children.toList.foreach(render(app, _, depth))
+          // Interleave summary bullets with each corresponding child rendering,
+          // so bullets appear right after the header and before each call block.
+          val ordered = children.toList
+          ordered.foreach { child =>
+            baseCtx.foreach { (nd, base) =>
+              (child: @unchecked) match
+                case cp @ CallPath(call, cty, _) =>
+                  cp.truthOpt.foreach { b =>
+                    val baseStr = s"`${prettyBase(base, nd)}`"
+                    val truthWord = if b then "True" else "False"
+                    app :> s"${indent(depth)}* $baseStr is ${showTy(cty)} because `${callSig(call)}` is $truthWord"
+                    specLine(call).map { line =>
+                      app :> s"${indent(depth)}// $line"
+                    }.getOrElse(())
+                  }
+                case _ => ()
+            }
+            render(app, child, depth, baseCtx)
+          }
 
         case Join(children) =>
           app :> s"${indent(depth)}Either of the following statements hold:"
-          children.toList.foreach(render(app, _, depth))
+          children.toList.foreach(render(app, _, depth, baseCtx))
 
         case CallPath(call, _, child) =>
           val callLine = callSig(call)
           app :> s"${indent(depth)}  $callLine"
-          // Also show the corresponding spec line for the call
-          specLine(call).map { line =>
-            app :> s"${indent(depth)}// $line"
-          }.getOrElse(())
-          render(app, child, depth + 1)
+          render(app, child, depth + 1, baseCtx)
 
         case Leaf(node, baseOpt, ty, truthOpt) =>
-          val baseStr = baseOpt.map(b => s"`$b`").getOrElse("<>")
+          val baseStr = baseOpt.map(b => s"`${prettyBase(b, node)}`").getOrElse("<>")
           val line = specLine(node)
           val cond = line.flatMap(extractCond).orElse(line.map(dropStepPrefix))
           val suffix = truthOpt.map(b => if b then " is True" else " is False").getOrElse("")
@@ -885,14 +937,38 @@ trait TypeGuardDecl { self: TyChecker =>
         case _ => ()
 
     private def algoCode(func: Func): Option[String] =
-      func.irFunc.algo.map(_.code)
-        .orElse(cfg.spec.fnameMap.get(func.irFunc.name).map(_.code))
+      // Prefer raw spec text to preserve wording like "If ... then".
+      cfg.spec.fnameMap.get(func.irFunc.name).map(_.code)
+        .orElse(func.irFunc.algo.map(_.code))
 
     private def specLine(node: Node): Option[String] = for {
       loc <- node.loc
       func = cfg.funcOf(node)
       code <- algoCode(func)
-    } yield s"${loc.stepString}. ${oneLine(loc.getString(code))}"
+      line <- findStepFullLine(code, loc)
+    } yield line
+
+    private def findStepFullLine(code: String, loc: esmeta.util.Loc): Option[String] =
+      val prefix = s"${loc.stepString}. "
+      // scan for last prefix occurrence at or before loc.start.offset
+      var idx = -1
+      var from = 0
+      var found = code.indexOf(prefix, from)
+      while found >= 0 && found <= loc.start.offset do
+        idx = found
+        from = found + 1
+        found = code.indexOf(prefix, from)
+      // if none found before, fallback to first occurrence
+      if idx == -1 then idx = code.indexOf(prefix)
+      if idx == -1 then Some(s"${loc.stepString}. ${oneLine(loc.getString(code))}")
+      else
+        val lineStart = code.lastIndexOf('\n', idx) match
+          case -1 => 0
+          case i  => i + 1
+        val lineEnd = code.indexOf('\n', idx) match
+          case -1 => code.length
+          case j  => j
+        Some(oneLine(code.substring(lineStart, lineEnd)))
 
     private def oneLine(s: String): String =
       s.replace("\r", " ").replace("\n", " ").trim
