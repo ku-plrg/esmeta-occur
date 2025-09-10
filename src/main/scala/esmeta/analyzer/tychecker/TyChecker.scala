@@ -259,6 +259,40 @@ class TyChecker(
             filename = s"$ANALYZE_LOG_DIR/provenance-logs",
             silent = silent,
           )
+          // additionally, dump provenance logs split by function
+          val provDir = s"$ANALYZE_LOG_DIR/provenances"
+          mkdir(provDir)
+          // group provenances by function name (without ID)
+          val grouped = provenances.toList.groupBy {
+            case ((target, _, _), _) => target.func.name
+          }
+          // stringify helper matching provString format
+          def stringify(
+            m: Map[(RefinementTarget, Base, ValueTy), Provenance],
+          ): String =
+            given Rule[Map[(RefinementTarget, Base, ValueTy), Provenance]] =
+              import SymTy.given, TypeGuard.given, ValueTy.given
+              (app, refined) =>
+                val sorted = refined.toList.sortBy { (t, _) =>
+                  (t._1.node.id, t._3.toString())
+                }
+                for (((target, base, ty), prov) <- sorted)
+                  app >> target >> "["
+                  app >> base >> "]"
+                  app >> ": " >> ty
+                  app >> "->" >> LINE_SEP >> prov
+                  app >> LINE_SEP
+                app
+            (new Appender >> m).toString
+          for ((fname, entries) <- grouped) {
+            val data = stringify(entries.toMap)
+            dumpFile(
+              name = s"provenance information for $fname",
+              data = data,
+              filename = s"$provDir/$fname",
+              silent = silent,
+            )
+          }
           dumpFile(
             name = "provenance graph",
             data = sizeAndDepth,
