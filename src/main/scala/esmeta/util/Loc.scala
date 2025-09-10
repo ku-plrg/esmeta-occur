@@ -71,6 +71,41 @@ case class Loc(
       case 2 => RomanNumeral(step, lower = true)
     ).mkString(".")
 
+  /** find the full spec line for this location using step information */
+  def findStepFullLine(code: String): Option[String] =
+    val prefix = s"${stepString}. "
+    // scan for last prefix occurrence at or before start.offset
+    var idx = -1
+    var from = 0
+    var found = code.indexOf(prefix, from)
+    while found >= 0 && found <= start.offset do
+      idx = found
+      from = found + 1
+      found = code.indexOf(prefix, from)
+    // if none found before, fallback to first occurrence
+    if idx == -1 then idx = code.indexOf(prefix)
+    if idx == -1 then
+      Some(Loc.oneLine(replaceStepPrefix(getLine(code))))
+    else
+      val lineStart = code.lastIndexOf('\n', idx) match
+        case -1 => 0
+        case i  => i + 1
+      val lineEnd = code.indexOf('\n', idx) match
+        case -1 => code.length
+        case j  => j
+      val raw = code.substring(lineStart, lineEnd)
+      Some(Loc.oneLine(replaceStepPrefix(raw)))
+
+  /** Replace a fixed numeric step at the beginning of a line with this loc's step */
+  def replaceStepPrefix(line: String): String =
+    val major = stepString.takeWhile(_.isDigit) match
+      case s if s.nonEmpty => s
+      case _               => stepString
+    val StepNum = "^(\\s*)(\\d+)(\\.\\s+)(.*)$".r
+    line match
+      case StepNum(ws, _, dotSpace, rest) => s"$ws$major$dotSpace$rest"
+      case _                               => line
+
   /** merge locations */
   def merge(that: Loc): Option[Loc] =
     val Loc(start, _, lname, lsteps) = this
@@ -87,6 +122,18 @@ case class Loc(
     filename.map(app >> " @ " >> _)
     app >> ")"
     app.toString
+}
+
+object Loc {
+  /** sanitize a string to a single line */
+  def oneLine(s: String): String =
+    s.replace("\r", " ").replace("\n", " ").trim
+
+  /** drop the leading step prefix like "1. " from a line, if present */
+  def dropStepPrefix(s: String): String =
+    s.indexOf(". ") match
+      case -1 => s
+      case i  => s.substring(i + 2)
 }
 
 /** positions in algorithms

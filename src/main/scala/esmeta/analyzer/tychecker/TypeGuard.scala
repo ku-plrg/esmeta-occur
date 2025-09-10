@@ -834,6 +834,25 @@ trait TypeGuardDecl { self: TyChecker =>
       s.replaceAll("""\bRecord\[([A-Za-z0-9_]+)\]""", "$1")
     private def showTy(ty: ValueTy): String = humanizeRecordNames(ty.toString)
 
+    // -----------------------------------------------------------------------
+    // Ordering helpers for consistent printing
+    // -----------------------------------------------------------------------
+    private def stepSeqOf(node: Node): Option[List[Int]] = node.loc.map(_.steps)
+    private def stepSeqOf(prov: Provenance): Option[List[Int]] = prov match
+      case RefinePoint(target, child, _, _, _, _) => stepSeqOf(target.node)
+      case Leaf(node, _, _, _)                    => stepSeqOf(node)
+      case CallPath(call, _, child)               => stepSeqOf(call).orElse(stepSeqOf(child))
+      case Join(children) =>
+        val seqs = children.toList.flatMap(stepSeqOf)
+        if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
+      case Meet(children) =>
+        val seqs = children.toList.flatMap(stepSeqOf)
+        if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
+    private def stepsCode(steps: List[Int]): BigInt =
+      steps.foldLeft(BigInt(0))((acc, s) => acc * 1000 + BigInt(s))
+    private def stepRankOf(prov: Provenance): BigInt =
+      stepSeqOf(prov).map(stepsCode).getOrElse(BigInt(Long.MaxValue))
+
     def print(app: Appender, prov: Provenance): Appender =
       prov match
         case rp: RefinePoint =>
@@ -893,11 +912,13 @@ trait TypeGuardDecl { self: TyChecker =>
 
         case Meet(children) =>
           app :> s"${indent(depth)}All the following statements hold:"
-          children.toList.foreach(render(app, _, depth, baseCtx))
+          val ordered = children.toList.sortBy(stepRankOf)
+          ordered.foreach(render(app, _, depth, baseCtx))
 
         case Join(children) =>
           app :> s"${indent(depth)}Either of the following statements hold:"
-          children.toList.foreach(render(app, _, depth, baseCtx))
+          val ordered = children.toList.sortBy(stepRankOf)
+          ordered.foreach(render(app, _, depth, baseCtx))
 
         case cp @ CallPath(call, cty, child) =>
           baseCtx.foreach { (nd, base) =>
@@ -918,7 +939,7 @@ trait TypeGuardDecl { self: TyChecker =>
           val baseStr = baseOpt.map(b => s"`${prettyBase(b, node)}`").getOrElse("<>")
           val line = specLine(node)
           val reason = originSnippet(node)
-            .orElse(line.flatMap(extractCond).orElse(line.map(dropStepPrefix)))
+            .orElse(line.flatMap(extractCond).orElse(line.map(Loc.dropStepPrefix)))
           val suffix = truthOpt.map(b => if b then " is True" else " is False").getOrElse("")
           val because = reason.map(c => s" because `$c`$suffix").getOrElse("")
           app :> s"${indent(depth)}* [ORIGIN] $baseStr is ${showTy(ty)}$because"
@@ -938,57 +959,16 @@ trait TypeGuardDecl { self: TyChecker =>
       loc <- node.loc
       func = cfg.funcOf(node)
       code <- algoCode(func)
-      line <- findStepFullLine(code, loc)
+      line <- loc.findStepFullLine(code)
     } yield line
 
     private def originSnippet(node: Node): Option[String] = for {
       loc <- node.loc
       func = cfg.funcOf(node)
       code <- algoCode(func)
-    } yield oneLine(loc.getString(code))
+    } yield Loc.oneLine(loc.getString(code))
 
-    private def findStepFullLine(code: String, loc: esmeta.util.Loc): Option[String] =
-      val prefix = s"${loc.stepString}. "
-      // scan for last prefix occurrence at or before loc.start.offset
-      var idx = -1
-      var from = 0
-      var found = code.indexOf(prefix, from)
-      while found >= 0 && found <= loc.start.offset do
-        idx = found
-        from = found + 1
-        found = code.indexOf(prefix, from)
-      // if none found before, fallback to first occurrence
-      if idx == -1 then idx = code.indexOf(prefix)
-      if idx == -1 then
-        Some(oneLine(replaceStepPrefix(loc.getLine(code), loc.stepString)))
-      else
-        val lineStart = code.lastIndexOf('\n', idx) match
-          case -1 => 0
-          case i  => i + 1
-        val lineEnd = code.indexOf('\n', idx) match
-          case -1 => code.length
-          case j  => j
-        val raw = code.substring(lineStart, lineEnd)
-        Some(oneLine(replaceStepPrefix(raw, loc.stepString)))
-
-    // Replace the fixed step number at the beginning (e.g., "1. ") with the
-    // actual step from loc.stepString. We use only the major numeric part
-    // (e.g., "3" for "3.ii.c") to match expected formatting.
-    private def replaceStepPrefix(line: String, stepStr: String): String =
-      val major = stepStr.takeWhile(_.isDigit) match
-        case s if s.nonEmpty => s
-        case _               => stepStr
-      val StepNum = "^(\\s*)(\\d+)(\\.\\s+)(.*)$".r
-      line match
-        case StepNum(ws, _, dotSpace, rest) => s"$ws$major$dotSpace$rest"
-        case _                               => line
-
-    private def oneLine(s: String): String =
-      s.replace("\r", " ").replace("\n", " ").trim
-    private def dropStepPrefix(s: String): String =
-      s.indexOf(". ") match
-        case -1 => s
-        case i  => s.substring(i + 2)
+    
 
     // Try to extract the condition from an "If <cond>, ..." line
     private def extractCond(s: String): Option[String] =
