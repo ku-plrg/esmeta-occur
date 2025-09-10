@@ -97,7 +97,10 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         constr.map.get(x) match
           // local variable is directly refined
           case Some((bty, prov)) if ty != bty =>
-            provenances += (target, x, refinedTo) -> prov.usedForRefine(target)
+            provenances += (target, x, refinedTo) -> prov.usedForRefine(
+              target,
+              x,
+            )
           case _ => ()
       }
 
@@ -113,9 +116,8 @@ trait AbsTransferDecl { analyzer: TyChecker =>
             refinedSt.locals.foreach { (local, v) =>
               // local variable is indirectly refined
               if st.get(local).symty.bases.contains(x) then
-                provenances += (target, local, refinedTo) -> prov.usedForRefine(
-                  target,
-                )
+                provenances += (target, local, refinedTo) -> prov
+                  .usedForRefine(target, local)
             }
           case _ => ()
       }
@@ -1611,7 +1613,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       st: AbsState,
     ): Option[(Base, (ValueTy, Provenance))] =
       toBase(pair).map { (base, ty) =>
-        base -> (ty, Provenance(ty)(using np.node))
+        base -> (ty, Provenance(base, ty)(using np.node))
       }
 
     def toBase(
@@ -1814,7 +1816,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
                 record = ObjectT.record.update(f, Binding.Exist, refine = true),
               )
             case _ => ObjectT
-          val prov = Provenance(refined)(using func.entry)
+          val prov = Provenance(0, refined)(using func.entry)
           val guard =
             if (useBooleanGuard) TypeGuard()
             else
@@ -1825,7 +1827,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         },
         "NewPromiseCapability" -> { (func, vs, retTy, st) =>
           given AbsState = st
-          val prov = Provenance(ConstructorT)(using func.entry)
+          val prov = Provenance(0, ConstructorT)(using func.entry)
           val guard =
             if (useBooleanGuard) TypeGuard()
             else
