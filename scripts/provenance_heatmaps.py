@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""
-Generate log-scaled heatmaps (square figure, bigger text, no legend)
-from the three count tables:
-
-  provenance-size-depth → heatmap_size_depth.pdf
-  provenance-depth-leaf → heatmap_depth_leafcnt.pdf
-  provenance-size-leaf  → heatmap_size_leafcnt.pdf
-"""
 
 import pandas as pd
 import numpy as np
@@ -18,6 +10,9 @@ from pathlib import Path
 # Publication-friendly font & proper PDF embedding
 mpl.rcParams["font.family"] = "Helvetica"     # fallback to Arial if missing
 mpl.rcParams["pdf.fonttype"] = 42             # embed TrueType glyphs
+
+# Use Seaborn "mako" colormap (reversed so low = bright, high = dark)
+CMAP = sns.color_palette("mako", as_cmap=True).reversed()
 
 def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> None:
     """Read three-column CSV (x, y, count) and save a log-scaled heatmap."""
@@ -56,7 +51,7 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
         mask=mask,
         annot=hm.to_numpy(),       # annotate with original counts, including zeros
         fmt=".0f",
-        cmap="viridis_r",          # low = bright, high = dark
+        cmap=CMAP,                  # low = bright, high = dark
         cbar=False,                # remove legend
         annot_kws={"size": 12},
         vmin=0                     # ensure zeros map to the lowest color, not "bad"
@@ -71,8 +66,8 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
     ax.set_xticklabels(x_vals, rotation=0)
     ax.set_yticklabels(y_vals, rotation=0)
 
-    ax.set_xlabel(x_name, fontsize=14)
-    ax.set_ylabel(y_name, fontsize=14)
+    ax.set_xlabel(x_name, fontsize=15, fontweight="bold")
+    ax.set_ylabel(y_name, fontsize=15, fontweight="bold")
     ax.tick_params(axis="both", labelsize=12)
     plt.tight_layout()
     plt.savefig(pdf_path)
@@ -81,8 +76,8 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
 # === Generate all three heatmaps ============================================
 tasks = [
     ("provenance-size-depth", ("Size",  "Depth"),   "heatmap-size-depth.pdf"),
-    ("provenance-depth-leaf", ("Depth", "Leafcnt"), "heatmap-depth-leaf.pdf"),
-    ("provenance-size-leaf",  ("Size",  "Leafcnt"), "heatmap-size-leaf.pdf"),
+    ("provenance-depth-leaf", ("Depth", "Leaf Count"), "heatmap-depth-leaf.pdf"),
+    ("provenance-size-leaf",  ("Size",  "Leaf Count"), "heatmap-size-leaf.pdf"),
 ]
 
 for csv, (x, y), pdf in tasks:
