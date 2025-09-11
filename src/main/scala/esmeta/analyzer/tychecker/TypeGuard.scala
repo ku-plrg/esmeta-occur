@@ -524,6 +524,16 @@ trait TypeGuardDecl { self: TyChecker =>
     def toTree: String = toTree(0)
   }
 
+  // Provenance placeholder used to mask complex functions like GetFunctionRealm
+  case class Placeholder(name: String) extends Provenance {
+    lazy val ty: ValueTy = BotT
+    def size: Int = 0
+    def depth: Int = 0
+    def leafCnt: Int = 0
+    override def toString: String = s"$name: No explanation provided (too complex)"
+    def toTree(indent: Int): String = s"${"  " * indent}$toString"
+  }
+
   // Leaf provenance: attach base and node to recover spec text later
   case class Leaf(
     node: Node,
@@ -623,6 +633,35 @@ trait TypeGuardDecl { self: TyChecker =>
       truth: Option[Boolean] = None,
     )(using nd: Node): Provenance =
       if useProvenance then Leaf(nd, Some(base), ty, truth) else Bot
+
+    // Check whether a provenance tree involves a function by name
+    def involvesFunc(prov: Provenance, fname: String): Boolean = prov match
+      case Leaf(node, _, _, _) =>
+        val f = cfg.funcOf(node)
+        f.name == fname || f.irFunc.name == fname
+      case CallPath(call, _, child) =>
+        // Detect direct calls to a target algorithm by closure name or SDO method
+        val direct = call.callInst match
+          case ICall(_, fexpr, _) => fexpr match
+              case EClo(fn, _) => fn == fname
+              case ECont(_)    => false
+              case _           => false
+          case ISdoCall(_, _, method, _) => method == fname
+        direct || involvesFunc(child, fname)
+      case Join(children)        => children.exists(involvesFunc(_, fname))
+      case Meet(children)        => children.exists(involvesFunc(_, fname))
+      case RefinePoint(target, child, _, _, _, _) =>
+        val f = target.func
+        f.name == fname || f.irFunc.name == fname || involvesFunc(child, fname)
+      case Bot | Top => false
+
+    // Mask provenance tree with a placeholder if it involves an exception function
+    private val ExceptionFuncs: Set[String] = Set("GetFunctionRealm")
+    def isExceptionName(name: String): Boolean = ExceptionFuncs.contains(name)
+    def maskExceptions(prov: Provenance): Provenance =
+      ExceptionFuncs.collectFirst { case n if involvesFunc(prov, n) => n } match
+        case Some(name) => Placeholder(name)
+        case None       => prov
   }
   // -----------------------------------------------------------------------------
   // helpers
@@ -855,7 +894,15 @@ trait TypeGuardDecl { self: TyChecker =>
       stepSeqOf(prov).map(stepsCode).getOrElse(BigInt(Long.MaxValue))
 
     def print(app: Appender, prov: Provenance): Appender =
+      // Short-circuit for masked exception functions
       prov match
+        case Placeholder(name) =>
+          app :> s"$name: No explanation provided (too complex)"
+        case rp: RefinePoint if containsPlaceholder(rp) =>
+          // If inner provenance was masked, print placeholder only
+          findPlaceholderName(rp).foreach { name =>
+            app :> s"$name: No explanation provided (too complex)"
+          }
         case rp: RefinePoint =>
           val func = cfg.funcOf(rp.target.node)
           val params = func.irFunc.params.map(_.lhs.toString).mkString(", ")
@@ -890,6 +937,8 @@ trait TypeGuardDecl { self: TyChecker =>
       baseCtx: Option[(Node, Base)] = None,
     ): Unit =
       prov match
+        case Placeholder(name) =>
+          app :> s"${indent(depth)}$name: No explanation provided (too complex)"
         case RefinePoint(target, child, baseOpt, branchOpt, refinedOpt, varRefinedOpt) =>
           val baseStr = baseOpt.map(b => s"`${prettyBase(b, target.node)}`").getOrElse("<>")
           val refinedStr =
@@ -950,6 +999,22 @@ trait TypeGuardDecl { self: TyChecker =>
           }.getOrElse(())
 
         case _ => ()
+
+    private def containsPlaceholder(prov: Provenance): Boolean = prov match
+      case Placeholder(_)                 => true
+      case RefinePoint(_, child, _, _, _, _) => containsPlaceholder(child)
+      case CallPath(_, _, child)          => containsPlaceholder(child)
+      case Join(children)                 => children.exists(containsPlaceholder)
+      case Meet(children)                 => children.exists(containsPlaceholder)
+      case _                              => false
+
+    private def findPlaceholderName(prov: Provenance): Option[String] = prov match
+      case Placeholder(name)                 => Some(name)
+      case RefinePoint(_, child, _, _, _, _) => findPlaceholderName(child)
+      case CallPath(_, _, child)             => findPlaceholderName(child)
+      case Join(children) => children.toList.flatMap(findPlaceholderName).headOption
+      case Meet(children) => children.toList.flatMap(findPlaceholderName).headOption
+      case _ => None
 
     private def algoCode(func: Func): Option[String] =
       // Prefer raw spec text to preserve wording like "If ... then".

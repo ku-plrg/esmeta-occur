@@ -290,6 +290,7 @@ class TyChecker(
               silent = true,
             )
           }
+          
           dumpFile(
             name = "provenance graph",
             data = sizeAndDepth,

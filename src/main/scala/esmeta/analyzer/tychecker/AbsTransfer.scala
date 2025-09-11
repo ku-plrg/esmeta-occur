@@ -91,6 +91,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       refinedSt: AbsState,
       refinedTo: ValueTy,
     ): Unit = {
+      // Skip recording provenance when the refinement target function itself
+      // is an exception (e.g., GetFunctionRealm). This prevents creating a
+      // per-function provenance log file for those functions.
+      val tname = target.func.name
+      val irname = target.func.irFunc.name
+      if (Provenance.isExceptionName(tname) || Provenance.isExceptionName(irname)) return
       for {
         (x, v) <- st.locals
         ty = v.ty(using st)
@@ -101,8 +107,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           // local variable is directly refined
           case Some((bty, prov)) if ty != bty =>
             // Attach refined variable type for header display.
-            provenances += (target, x, refinedTo) -> prov
-              .usedForRefine(target, x, refinedTo, refinedTy)
+            val masked = Provenance.maskExceptions(prov)
+            masked match
+              case Placeholder(_) => () // skip counting/showing
+              case _ =>
+                provenances += (target, x, refinedTo) -> masked
+                  .usedForRefine(target, x, refinedTo, refinedTy)
           case _ => ()
       }
 
@@ -119,8 +129,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
               // local variable is indirectly refined
               if st.get(local).symty.bases.contains(x) then
                 val localRefinedTy = refinedSt.get(local).ty(using refinedSt)
-                provenances += (target, local, refinedTo) -> prov
-                  .usedForRefine(target, local, refinedTo, localRefinedTy)
+                val masked = Provenance.maskExceptions(prov)
+                masked match
+                  case Placeholder(_) => () // skip counting/showing
+                  case _ =>
+                    provenances += (target, local, refinedTo) -> masked
+                      .usedForRefine(target, local, refinedTo, localRefinedTy)
             }
           case _ => ()
       }
