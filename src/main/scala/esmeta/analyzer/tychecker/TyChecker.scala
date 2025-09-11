@@ -287,7 +287,7 @@ class TyChecker(
               name = s"provenance information for $fname",
               data = data,
               filename = s"$provDir/$fname",
-              silent = silent,
+              silent = true,
             )
           }
           dumpFile(
