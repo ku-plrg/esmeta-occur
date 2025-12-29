@@ -47,9 +47,6 @@ case class Loc(
   /** get the string from the original string */
   def getString(str: String): String = str.substring(start.offset, end.offset)
 
-  /** get range string */
-  def rangeString: String = s"$start-$end"
-
   /** get the full line at the start position from the original string */
   def getLine(str: String): String =
     if (str.isEmpty) return ""
@@ -64,6 +61,9 @@ case class Loc(
       case -1 => str.length
       case j  => j
     str.substring(lineStart, lineEnd).replace("\r", "")
+
+  /** get range string */
+  def rangeString: String = s"$start-$end"
 
   /** get step string */
   def stepString: String =
@@ -170,8 +170,8 @@ case class Pos(
   override def toString: String = s"$line:$column($offset)"
 }
 
-/** ordering of locations */
-given Ordering[Loc] = Ordering.by(loc => (loc.start, loc.end))
-
 /** ordering of positions */
 given Ordering[Pos] = Ordering.by(pos => (pos.line, pos.column))
+
+/** ordering of locations */
+given Ordering[Loc] = Ordering.by(loc => (loc.start, loc.end))

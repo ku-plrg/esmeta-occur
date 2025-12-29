@@ -16,7 +16,6 @@ trait TypeGuardDecl { self: TyChecker =>
     def isEmpty: Boolean = map.isEmpty
     def nonEmpty: Boolean = !isEmpty
     def dtys: Set[DemandType] = map.keySet
-
     private def get(dty: DemandType): Option[TypeProp] = map.get(dty)
 
     def apply(ty: ValueTy): TypeProp = lookup(ty)
@@ -43,7 +42,7 @@ trait TypeGuardDecl { self: TyChecker =>
         if !(ty && dty.ty).isBottom
       } yield dty -> this.lookup(dty.ty))
 
-    def fieldLookup(fld: String): TypeGuard =
+    def lookupField(fld: String): TypeGuard =
       val m = for
         (dty, p) <- map
         ity = dty.ty.record(fld).value
@@ -55,7 +54,10 @@ trait TypeGuardDecl { self: TyChecker =>
           acc.update(dty.ty, p)
       }
 
-    def fieldUpdate(fld: String, ty: ValueTy): TypeGuard =
+    def fieldLookup(fld: String): TypeGuard =
+      lookupField(fld)
+
+    def updateField(fld: String, ty: ValueTy): TypeGuard =
       val m = for {
         (dty, p) <- map
         newTy = dty.ty.record.update(fld, ty, refine = false)
@@ -66,6 +68,9 @@ trait TypeGuardDecl { self: TyChecker =>
           val (dty, p) = curr
           acc.update(dty.ty, p)
       }
+
+    def fieldUpdate(fld: String, ty: ValueTy): TypeGuard =
+      updateField(fld, ty)
 
     def apply(dty: DemandType): TypeProp =
       map.getOrElse(dty, TypeProp())
@@ -78,18 +83,27 @@ trait TypeGuardDecl { self: TyChecker =>
       if newProp.nonTop
     } yield dty -> newProp)
 
+    def weaken(effect: Effect): TypeGuard = TypeGuard(for {
+      (dty, prop) <- map
+      newProp = prop.weaken(effect)
+      if newProp.nonTop
+    } yield dty -> newProp)
+
     def forReturn(symEnv: Map[Sym, ValueTy]): TypeGuard = TypeGuard(for {
       (dty, prop) <- map
       newProp = prop.forReturn(symEnv)
       if newProp.nonTop
     } yield dty -> newProp)
 
-    def lift(ty: ValueTy = ValueTy.Top)(using st: AbsState): TypeGuard =
+    def bind(ty: ValueTy = ValueTy.Top)(using st: AbsState): TypeGuard =
       this && TypeGuard((for {
         kind <- DemandType.from(ty).toList
-        prop = TypeProp().lift
+        prop = TypeProp().bind
         if prop.nonTop
       } yield kind -> prop).toMap)
+
+    def lift(ty: ValueTy = ValueTy.Top)(using st: AbsState): TypeGuard =
+      bind(ty)
 
     def has(x: Base): Boolean = map.values.exists(_.has(x))
 
@@ -172,6 +186,7 @@ trait TypeGuardDecl { self: TyChecker =>
         .map(DemandType(_))
   }
 
+  /** type constraints */
   case class TypeProp(
     localEnv: Map[Local, (ValueTy, Provenance)] = Map(),
     symEnv: Map[Sym, (ValueTy, Provenance)] = Map(),
@@ -257,6 +272,15 @@ trait TypeGuardDecl { self: TyChecker =>
         sexpr = sexpr.fold(None)(_.weaken(bases)),
       )
 
+    def weaken(effect: Effect): TypeProp =
+      import TypeGuardDecl.this.Effect.*
+      TypeProp(
+        localEnv = localEnv.map {
+          case (x, (ty, prov)) => x -> (effect(ty), prov)
+        },
+        symEnv = symEnv.map { case (x, (ty, prov)) => x -> (effect(ty), prov) },
+      )
+
     def forReturn(symEnv: Map[Sym, ValueTy]): TypeProp = TypeProp(
       symEnv = for {
         (x, (ty, prov)) <- this.symEnv
@@ -286,8 +310,8 @@ trait TypeGuardDecl { self: TyChecker =>
       )).maxOption
         .getOrElse(0)
 
-    def lift(using st: AbsState): TypeProp =
-      this && st.prop
+    def bind(using st: AbsState): TypeProp =
+      this && st.ctx
 
     override def toString: String = (new Appender >> this).toString
   }
@@ -351,8 +375,6 @@ trait TypeGuardDecl { self: TyChecker =>
     override def toString: String = (new Appender >> this).toString
   }
   object SymExpr {
-    // val T: SymExpr = SEBool(true)
-    // val F: SymExpr = SEBool(false)
     extension (l: Option[SymExpr])
       def &&(
         r: Option[SymExpr],
@@ -395,7 +417,6 @@ trait TypeGuardDecl { self: TyChecker =>
         else None
       case RefinePoint(_, child, _, _, _, _) => child.truthOpt
       case Provenance.Bot | Provenance.Top   => None
-      case Placeholder(_)                    => ???
 
     // simple explanation is bigger (imprecise)
     def <=(that: Provenance): Boolean = {
@@ -704,8 +725,7 @@ trait TypeGuardDecl { self: TyChecker =>
       case RefinePoint(target, child, _, _, _, _) =>
         val f = target.func
         f.name == fname || f.irFunc.name == fname || involvesFunc(child, fname)
-      case Bot | Top      => false
-      case Placeholder(_) => ???
+      case Bot | Top => false
 
     // Mask provenance tree with a placeholder if it involves an exception function
     private val ExceptionFuncs: Set[String] = Set("GetFunctionRealm")
@@ -737,6 +757,12 @@ trait TypeGuardDecl { self: TyChecker =>
 
   // Expose the helper as the given instance, avoiding self-referential implicit search issues.
   given Rule[SymExpr] = symExprRule
+  // case SEOr(left, right) =>
+  //   app >> "(|| " >> left >> " " >> right >> ")"
+  // case SEAnd(left, right) =>
+  //   app >> "(&& " >> left >> " " >> right >> ")"
+  // case SENot(expr) =>
+  //   app >> "(! " >> expr >> ")"
 
   /** Provenance pretty printer (spec-like) */
   given Rule[Provenance] = (app, prov) => ProvTextPrinter.print(app, prov)
@@ -786,6 +812,133 @@ trait TypeGuardDecl { self: TyChecker =>
       case NodeTarget(nd)               => (nd.id, 0)
   }
 
+  object ProvPrinter {
+    def getId(prov: Provenance): String =
+      prov match
+        case Leaf(node, _, ty, _)      => norm(s"Leaf${node.id}")
+        case CallPath(call, ty, child) => norm(s"call${call.id}")
+        case Join(child)               => norm(s"join${child.hashCode()}")
+        case Meet(child)               => norm(s"meet${child.hashCode()}")
+        case RefinePoint(target, _, _, _, _, _) =>
+          norm(s"refine${target.node.id}")
+        case Provenance.Bot => ???
+        case Provenance.Top => ???
+
+    /** Colors */
+    val NODE_COLOR = """"black""""
+    val BG_COLOR = """"white""""
+    val EDGE_COLOR = """"black""""
+
+    def draw(prov: Provenance): String =
+      given app: Appender = new Appender
+      (app >> "digraph").wrap {
+        app :> """graph [fontname = "Consolas"]"""
+        app :> """node [fontname = "Consolas"]"""
+        app :> """edge [fontname = "Consolas"]"""
+        drawProvenance(prov)
+      }
+      app.toString
+
+    def drawProvenance(prov: Provenance)(using app: Appender): Unit =
+      drawProvenanceNode(prov)
+      prov match
+        case CallPath(call, ty, child) => drawProvenance(child)
+        case Join(child) =>
+          child.foreach(drawProvenance)
+        case Meet(child) =>
+          child.foreach(drawProvenance)
+        case RefinePoint(target, child, _, _, _, _) => drawProvenance(child)
+        case _                                      => ()
+
+    def drawProvenanceNode(prov: Provenance)(using Appender): Unit =
+      prov match
+        case p @ Leaf(node, _, ty, _) =>
+          drawNaming(getId(p), NODE_COLOR, node.name)
+          drawNode(getId(p), "box", NODE_COLOR, BG_COLOR, Some(ty.toString))
+        case p @ CallPath(call, ty, child) =>
+          drawNaming(getId(p), NODE_COLOR, call.name)
+          drawNode(getId(p), "box", NODE_COLOR, BG_COLOR, Some(ty.toString))
+          drawEdge(getId(p), getId(child), EDGE_COLOR, None)
+        case p @ Join(child) =>
+          drawNode(
+            getId(p),
+            "ellipse",
+            NODE_COLOR,
+            BG_COLOR,
+            Some(p.ty.toString),
+          )
+          child.foreach { c =>
+            drawEdge(getId(p), getId(c), EDGE_COLOR, None)
+          }
+        case p @ Meet(child) =>
+          drawNode(
+            getId(p),
+            "diamond",
+            NODE_COLOR,
+            BG_COLOR,
+            Some(p.ty.toString),
+          )
+          child.foreach { c =>
+            drawEdge(getId(p), getId(c), EDGE_COLOR, None)
+          }
+        case p @ RefinePoint(target, child, _, _, _, _) =>
+          drawNode(
+            getId(p),
+            "hexagon",
+            NODE_COLOR,
+            BG_COLOR,
+            Some(s"${target.node.name} (${target.func.nameWithId})"),
+          )
+          drawNaming(getId(p), NODE_COLOR, target.node.name)
+          drawEdge(getId(p), getId(child), EDGE_COLOR, Some(p.ty.toString))
+        case Provenance.Bot => ()
+        case Provenance.Top => ()
+
+    def drawNode(
+      dotId: String,
+      shape: String,
+      color: String,
+      bgColor: String,
+      labelOpt: Option[String],
+    )(using app: Appender): Unit = labelOpt match
+      case Some(label) =>
+        app :> s"""$dotId [shape=$shape, label=<<font color=$color>$label</font>> color=$color fillcolor=$bgColor, style=filled]"""
+      case None =>
+        app :> s"""$dotId [shape=$shape label=" " color=$color fillcolor=$bgColor style=filled]"""
+
+    def drawEdge(
+      fid: String,
+      tid: String,
+      color: String,
+      labelOpt: Option[String],
+    )(using app: Appender): Unit =
+      app :> s"$fid -> $tid ["
+      labelOpt.map { label =>
+        app >> s"label=<<font color=$color>$label</font>> "
+      }
+      app >> s"color=$color]"
+
+    def drawNaming(
+      id: String,
+      color: String,
+      name: String,
+    )(using app: Appender): Unit =
+      app :> id >> "_name [shape=none, "
+      app >> "label=<<font color=" >> color >> ">" >> name >> "</font>>]"
+      app :> id >> "_name -> " >> id
+      app >> " [arrowhead=none, color=" >> color >> ", style=dashed]"
+
+    def norm(str: String): String =
+      val s = HtmlUtils.escapeHtml(str).replaceAll("\u0000", "U+0000")
+      s.replaceAll("[^a-zA-Z0-9]", "")
+    def norm(node: IRElem): String =
+      norm(node.toString(detail = false, location = false))
+    protected def norm(insts: Iterable[Inst]): String = (for {
+      (inst, idx) <- insts.zipWithIndex
+      str = norm(inst)
+    } yield s"""[$idx] $str<BR ALIGN="LEFT"/>""").mkString
+  }
+
   // ---------------------------------------------------------------------------
   // Provenance Text Printer
   // ---------------------------------------------------------------------------
@@ -813,7 +966,6 @@ trait TypeGuardDecl { self: TyChecker =>
         val seqs = children.toList.flatMap(stepSeqOf)
         if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
       case Provenance.Bot | Provenance.Top => None
-      case Placeholder(_)                  => ???
     private def stepsCode(steps: List[Int]): BigInt =
       steps.foldLeft(BigInt(0))((acc, s) => acc * 1000 + BigInt(s))
     private def stepRankOf(prov: Provenance): BigInt =
@@ -848,9 +1000,11 @@ trait TypeGuardDecl { self: TyChecker =>
         val func = cfg.funcOf(node)
         val entrySt = getResult(NodePoint(func, func.entry, emptyView))
         val opt = entrySt.locals.collectFirst {
-          case (lx, v) if (v.symty match
-                case SSym(ss) if ss == s => true
-                case _                   => false
+          case (lx, v)
+              if (
+                v.symty match
+                  case SSym(ss) if ss == s => true
+                  case _                   => false
               ) =>
             lx
         }

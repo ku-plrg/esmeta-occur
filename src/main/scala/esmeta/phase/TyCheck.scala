@@ -22,7 +22,11 @@ case object TyCheck extends Phase[CFG, Unit] {
     val tychecker = TyChecker(
       cfg = cfg,
       targetPattern = config.target,
-      inferTypeGuard = config.inferTypeGuard,
+      inferTypeGuard = !config.noRefine && config.inferTypeGuard,
+      useBooleanGuard = !config.noRefine && config.useBooleanGuard,
+      useProvenance = config.useProvenance,
+      useSyntacticKill = config.useSyntacticKill,
+      noRefine = config.noRefine,
       typeSens = config.typeSens,
       config = TyChecker.Config(),
       ignore = config.ignorePath.fold(Ignore())(Ignore.apply),
@@ -84,6 +88,26 @@ case object TyCheck extends Phase[CFG, Unit] {
       BoolOption(_.inferTypeGuard = _),
       "automatic inference of type guards (default: true).",
     ),
+    (
+      "provenance",
+      BoolOption(_.useProvenance = _),
+      "turn on provenance tracking.",
+    ),
+    (
+      "syntactic-kill",
+      BoolOption(_.useSyntacticKill = _),
+      "use syntactic kill for type checking(as Kent's work).",
+    ),
+    (
+      "use-boolean-guard",
+      BoolOption(_.useBooleanGuard = _),
+      "use boolean guard for type checking.",
+    ),
+    (
+      "no-refine",
+      BoolOption(_.noRefine = _),
+      "do not refine the type of variables.",
+    ),
   )
   case class Config(
     var target: Option[String] = None,
@@ -95,5 +119,9 @@ case object TyCheck extends Phase[CFG, Unit] {
     var detail: Boolean = false,
     var typeSens: Boolean = false,
     var inferTypeGuard: Boolean = true,
+    var useBooleanGuard: Boolean = false,
+    var useProvenance: Boolean = false,
+    var useSyntacticKill: Boolean = false,
+    var noRefine: Boolean = false,
   )
 }

@@ -18,7 +18,7 @@ class TyChecker(
   val inferTypeGuard: Boolean = true,
   val useBooleanGuard: Boolean = false,
   val useProvenance: Boolean = false,
-  val useSyntacticweaken: Boolean = false,
+  val useSyntacticKill: Boolean = false,
   val noRefine: Boolean = false,
   val typeSens: Boolean = false,
   val config: TyChecker.Config = TyChecker.Config(),
@@ -35,7 +35,8 @@ class TyChecker(
   with AbsRetDecl
   with AbsTransferDecl
   with TypeGuardDecl
-  with ViewDecl {
+  with ViewDecl
+  with EffectDecl {
 
   val tyStringifier = TyElem.getStringifier(false, false)
   import tyStringifier.given
@@ -107,7 +108,7 @@ class TyChecker(
             "typeSens" -> typeSens,
             "inferTypeGuard" -> inferTypeGuard,
             "useProvenance" -> useProvenance,
-            "useSyntacticweaken" -> useSyntacticweaken,
+            "useSyntacticKill" -> useSyntacticKill,
           ),
           "duration" -> f"${time}%,d ms",
           "error" -> errors.size,
@@ -240,6 +241,8 @@ class TyChecker(
         silent = silent,
       )
       if (inferTypeGuard) {
+        import ProvPrinter.*
+
         dumpFile(
           name = "type guard information",
           data = typeGuards
@@ -307,13 +310,27 @@ class TyChecker(
             silent = silent,
           )
         }
-        if (useSyntacticweaken) {
+        if (useSyntacticKill) {
           dumpFile(
             name = "mutated locals",
             data = cfg.funcs
               .map(f => f.nameWithId -> f.mutableLocals.mkString(", "))
               .mkString(LINE_SEP),
             filename = s"$ANALYZE_LOG_DIR/mutated",
+            silent = silent,
+          )
+          dumpFile(
+            name = "impure functions",
+            data = impureFuncs.map(_.name).toList.sorted.mkString(LINE_SEP),
+            filename = s"$ANALYZE_LOG_DIR/impure",
+            silent = silent,
+          )
+          dumpFile(
+            name = "pure functions",
+            data = (cfg.funcs.map(_.name).toSet -- impureFuncs.map(
+              _.name,
+            )).toList.sorted.mkString(LINE_SEP),
+            filename = s"$ANALYZE_LOG_DIR/pure",
             silent = silent,
           )
         }
@@ -379,7 +396,7 @@ class TyChecker(
     for {
       func <- cfg.funcs
       entrySt = getResult(NodePoint(func, func.entry, emptyView))
-      AbsRet(value) = getResult(ReturnPoint(func, emptyView))
+      AbsRet(value, _) = getResult(ReturnPoint(func, emptyView))
       if value.hasTypeGuard(entrySt)
       guard = TypeGuard(for {
         (dty, pred) <- value.guard.map
@@ -430,12 +447,12 @@ class TyChecker(
       val (newLocals, symEnv) = (for {
         ((x, value), sym) <- idxLocals
       } yield {
-        if (useSyntacticweaken)
+        if useSyntacticKill && callee.canMakeSideEffect then
           (x -> AbsValue(STy(value.ty)), sym -> ValueTy.Bot)
         else (x -> AbsValue(SSym(sym)), sym -> value.ty)
       }).unzip
-      AbsState(true, newLocals.toMap, symEnv.toMap, TypeProp())
-    } else AbsState(true, locals.toMap, Map(), TypeProp())
+      AbsState(true, newLocals.toMap, symEnv.toMap, TypeProp(), Effect())
+    } else AbsState(true, locals.toMap, Map(), TypeProp(), Effect())
 
   /** get initial abstract states in each node point */
   private def getInitNpMap(
@@ -575,6 +592,22 @@ class TyChecker(
       .groupMap(_._1)(_._2)
       .map((k, v) => k -> v.toSet)
 
+  lazy val impureFuncs =
+    def basicImpureFuncs: Set[Func] =
+      cfg.funcs.filter(_.mutableLocals.nonEmpty).toSet
+    var visited = basicImpureFuncs
+    val queue = scala.collection.mutable.Queue.from(basicImpureFuncs)
+    while queue.nonEmpty do
+      val func = queue.dequeue()
+      for callee <- synCallGraph.getOrElse(func, Set()) do
+        if !visited.contains(callee) then
+          visited += callee
+          queue.enqueue(callee)
+    println(
+      s"${visited.size} functions are impure while ${cfg.funcs.size} functions exist.",
+    )
+    visited
+
   extension (inst: NormalInst) {
     def mutable: Set[Local] =
       def toBase(ref: Ref): Option[Local] = ref match
@@ -595,11 +628,13 @@ class TyChecker(
   }
   extension (func: Func) {
     def mutableLocals: Set[Base] = func.nodes.flatMap(_.mutable)
+    def canMakeSideEffect = impureFuncs.contains(func)
   }
   extension (np: NodePoint[?]) {
     def isMutable(ref: Ref): Boolean = ref match
       case l: Local => np.func.mutableLocals.contains(l)
       case _        => false
+    def canMakeSideEffect: Boolean = np.func.canMakeSideEffect
   }
 }
 

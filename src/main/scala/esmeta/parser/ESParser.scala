@@ -82,7 +82,6 @@ case class ESParser(
     ast match
       case ast: Syntactic => ast.children.map(_.map(updateOriginText(_, text)))
       case _              =>
-
   // ---------------------------------------------------------------------------
   // private helpers
   // ---------------------------------------------------------------------------

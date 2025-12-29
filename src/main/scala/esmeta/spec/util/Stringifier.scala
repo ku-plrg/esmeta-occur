@@ -109,6 +109,9 @@ object Stringifier {
       case NumericString => ":::"
     )
 
+  // for list of conditions for RHSs (must precede rhsRule)
+  given rhsCondsRule: Rule[List[RhsCond]] = iterableRule("[", ", ", "]")
+
   // for production alternative right-hand-sides (RHSs)
   given rhsRule: Rule[Rhs] = (app, rhs) =>
     val Rhs(conditions, symbols, id) = rhs
@@ -117,9 +120,6 @@ object Stringifier {
     app >> symbols
     id.foreach(app >> " #" >> _)
     app
-
-  // for list of conditions for RHSs
-  given rhsCondsRule: Rule[List[RhsCond]] = iterableRule("[", ", ", "]")
 
   // for conditions for RHSs
   given rhsCondRule: Rule[RhsCond] = (app, rhsCond) =>

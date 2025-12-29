@@ -8,5 +8,7 @@
   "FunctionBody[0,0].EvaluateFunctionBody",
   "GetViewByteLength",
   "Record[SourceTextModuleRecord].ExecuteModule",
-  "TypedArrayLength"
+  "TypedArrayGetElement",
+  "TypedArrayLength",
+  "TypedArraySetElement"
 ]

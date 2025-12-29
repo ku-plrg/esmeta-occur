@@ -38,15 +38,17 @@ trait Parsers extends IRParsers {
     ",",
   ) <~ "]" ^^ { _.toMap }
 
+  private lazy val cloFuncName: Parser[String] = """[^>,]+""".r
+
   given clo: Parser[Clo] = {
-    "clo<" ~> funcName ~ opt("," ~> captured) <~ ">" ^^ {
+    "clo<" ~> cloFuncName ~ opt("," ~> captured) <~ ">" ^^ {
       case f ~ c => Clo(cfg.fnameMap(f), c.getOrElse(Map()))
     }
   }.named("state.Clo")
 
   given cont: Parser[Cont] = {
     // TODO: callStack
-    "cont<" ~> funcName ~ opt("," ~> captured) <~ ">" ^^ {
+    "cont<" ~> cloFuncName ~ opt("," ~> captured) <~ ">" ^^ {
       case f ~ c => Cont(cfg.fnameMap(f), c.getOrElse(Map()), Nil)
     }
   }.named("state.Cont")

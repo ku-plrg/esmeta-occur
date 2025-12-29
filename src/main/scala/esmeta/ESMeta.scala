@@ -65,7 +65,7 @@ object ESMeta extends Git(BASE_DIR) {
        |Please type `esmeta help` to see the help message.""".stripMargin
 
   /** commands */
-  val commands: List[Command[_]] = List(
+  val commands: List[Command[?]] = List(
     CmdHelp,
     // Mechanized Specification Extraction
     CmdExtract,
@@ -86,12 +86,12 @@ object ESMeta extends Git(BASE_DIR) {
     CmdDumpDebugger,
     CmdDumpVisualizer,
   )
-  val cmdMap = commands.foldLeft[Map[String, Command[_]]](Map()) {
+  val cmdMap = commands.foldLeft[Map[String, Command[?]]](Map()) {
     case (map, cmd) => map + (cmd.name -> cmd)
   }
 
   /** phases */
-  var phases: List[Phase[_, _]] = List(
+  var phases: List[Phase[?, ?]] = List(
     Help,
     // Mechanized Specification Extraction
     Extract,

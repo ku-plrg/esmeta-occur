@@ -61,6 +61,11 @@ trait AbsValueDecl { self: TyChecker =>
       val guard = if (update) this.guard.weaken(bases) else this.guard
       AbsValue(ty, guard)
 
+    def weaken(effect: Effect)(using AbsState): AbsValue =
+      val sty = this.symty.weaken(effect)
+      val guard = this.guard.weaken(effect)
+      AbsValue(sty, guard)
+
     def refine(ty: ValueTy)(using st: AbsState): AbsValue =
       AbsValue(symty.refine(ty), guard.refine(ty))
 
@@ -71,6 +76,9 @@ trait AbsValueDecl { self: TyChecker =>
       )
       val newGuard = guard.fieldUpdate(fld, vty)
       AbsValue(newSymTy, newGuard)
+
+    def updateField(fld: String, value: AbsValue)(using AbsState): AbsValue =
+      fieldUpdate(fld, value)
 
     /** remove non-parameter local variables */
     def forReturn(
@@ -90,6 +98,8 @@ trait AbsValueDecl { self: TyChecker =>
       val inGuard = guard.bases
       inSymty ++ inGuard
 
+    def bind(using st: AbsState): AbsValue =
+      AbsValue(symty, guard.bind(this.ty))
     def lift(using st: AbsState): AbsValue =
       AbsValue(symty, guard.lift(this.ty))
 
@@ -106,8 +116,11 @@ trait AbsValueDecl { self: TyChecker =>
         }
       }
 
-    def weakenMutable(using np: NodePoint[_], st: AbsState) =
+    def weakenMutable(using np: NodePoint[_], st: AbsState): AbsValue =
       this.copy(guard = this.guard.weaken(np.func.mutableLocals))
+
+    def killMutable(using np: NodePoint[_], st: AbsState): AbsValue =
+      weakenMutable
 
     def isSymbolic: Boolean = symty.isSymbolic
 

@@ -1,0 +1,19 @@
+# Dots
+.bloop/
+.bsp/
+.metals/
+.vscode/
+.github/
+.idea/
+.cursor/
+.cursorrules
+.cursorignore
+.cursorignorerules
+
+logs/
+result/
+target/
+tests/
+
+*.tar
+*.tar.gz
