@@ -60,7 +60,7 @@ cd result
 
 doit base "-tycheck:no-refine=true"
 doit syn "-tycheck:infer-guard=false"
-doit pre "-tycheck:infer-guard=true -tycheck:use-syntactic-kill"
+doit nomut "-tycheck:infer-guard=true -tycheck:use-syntactic-kill"
 doit bool "-tycheck:use-boolean-guard"
 doit our ""
 doit prov "-tycheck:infer-guard=true -tycheck:provenance"

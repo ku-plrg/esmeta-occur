@@ -8,7 +8,7 @@ This tool is an extension of the **ESMeta**, **E**CMAScript **S**pecification **
   - A substantial reduction in false alarms. Specifically, our tool shows (as seen in Figure 19) that applying our technique dramatically decreases false alarms (red area).
     - (a) **Base** (`-tycheck:no-refine`): baseline with no refinements.
     - (b) **Syn** (`-tycheck:infer-guard=false`): original ESMeta using only syntactic refinement.
-    - (c) **Pre** (`-tycheck:use-syntactic-kill`): emulates *Occurrence Typing Modulo Theories (Kent et al., PLDI 2016)* by skipping analysis on potentially mutated variables.
+    - (c) **NoMut** (`-tycheck:use-syntactic-kill`): emulates *Occurrence Typing Modulo Theories (Kent et al., PLDI 2016)* by skipping analysis on potentially mutated variables.
     - (d) **Bool** (`-tycheck:use-boolean-guard`): restricts demanded types to true and false, illustrating the necessity of generalized demanded types.
     - (e) **Ours** (no extra flag): our full type guard implementation, reducing false alarms from an average of 263.63 (original *Syn*) to 26.7.
   - No significant performance degradation, as demonstrated in Figure 20.
@@ -26,7 +26,7 @@ Tests were conducted on **Linux** systems with **AMD64** architecture.
 ## Getting-Started guide 
 
 Run `./benchmark.sh` or `./benchmark-test.sh` to get a result for the full/test benchmark. Each takes approximately 3 hours / 5 minutes. 
-See /opt/esmeta/result/ for the results.
+See `result/` for the results.
 
 ## Step-by-Step guide
 
