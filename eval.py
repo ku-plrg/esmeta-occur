@@ -8,7 +8,7 @@ import argparse
 from typing import Optional, Tuple, List, Dict
 
 # --- Configuration ---
-# Keep these in sync with benchmark.sh / benchmark-test.sh.
+# Keep these in sync with scripts/benchmark.sh / scripts/benchmark-test.sh.
 FULL_EXPERIMENTS = {
     "base": "-tycheck:no-refine=true",
     "syn": "-tycheck:infer-guard=false",
@@ -211,7 +211,7 @@ def main():
     parser.add_argument(
         "--test",
         action="store_true",
-        help="Run the quick test benchmark (uses versions-test and nomut), matching benchmark-test.sh.",
+        help="Run the quick test benchmark (uses versions-test and nomut), matching scripts/benchmark-test.sh.",
     )
     args = parser.parse_args()
 
