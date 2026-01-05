@@ -37,6 +37,12 @@ Run `./benchmark.sh` from the root directory of the ESMETA (`/opt/esmeta` when u
 This process produces results covering ES2025 (Sep.) up to the latest internal ECMA-262 version, for all experimental settings (base, syn, pre, bool, ours, prov) in the `result/` directory. Each contains analyses of 167 versions, summarized in `summary.tsv`. We recommend opening these files in a spreadsheet tool.
 
 ### Manual Execution
+If you see the following message, ESMeta is successfully installed:
+```bash
+$ esmeta
+# Welcome to ESMeta v0.7.3 - ECMAScript Specification Metalanguage.
+# Please type `esmeta help` to see the help message.
+```
 
 If running a benchmark is too slow, or you just need data for a single version of the ECMA-262, you may want to run a single analysis.
 
