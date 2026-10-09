@@ -162,7 +162,7 @@ trait AbsStateDecl { self: TyChecker =>
     /** getter */
     def get(base: AbsValue, field: AbsValue)(using AbsState): AbsValue = {
       import SymExpr.*, SymTy.*
-      val guard = lookupGuard(base.guard, field)
+      val guard = lookupGuard(base, field)
       (base.symty, field.ty.getSingle) match
         case (ref: SymRef, One(Str(f))) =>
           AbsValue(SField(ref, STy(StrT(f))), guard)
@@ -247,21 +247,30 @@ trait AbsStateDecl { self: TyChecker =>
       case MapTy.Elem(key, value) => value
       case MapTy.Bot              => BotT
 
-    // guard lookup
+    // guard lookup in query form: a field result in a demand type `dty`
+    // means that the base is in `{ f: dty }`, so look up the base guard with
+    // the known base type refined by this field condition
     private def lookupGuard(
-      guard: TypeGuard,
+      base: AbsValue,
       field: AbsValue,
     )(using AbsState): TypeGuard = {
       import DemandType.*
-      field.ty.str.getSingle match
-        case One("Value") =>
-          TypeGuard(guard.map.collect {
-            case (DemandType(ty), map) if ty == NormalT(TrueT) =>
-              DemandType(TrueT) -> map
-            case (DemandType(ty), map) if ty == NormalT(FalseT) =>
-              DemandType(FalseT) -> map
-          })
-        case _ => TypeGuard.Empty
+      val guard = base.guard
+      if (guard.isEmpty) TypeGuard.Empty
+      else
+        field.ty.str.getSingle match
+          case One(f) =>
+            val baseTy = base.ty
+            TypeGuard((for {
+              dty <- DemandType.set.toList.map(DemandType(_))
+              ty = baseTy.copied(record =
+                baseTy.record.update(f, dty.ty, refine = true),
+              )
+              if !ty.isBottom
+              constr = guard.evaluate(ty, ty)
+              if constr.nonTop
+            } yield dty -> constr).toMap)
+          case _ => TypeGuard.Empty
     }
 
     /** define variables */
