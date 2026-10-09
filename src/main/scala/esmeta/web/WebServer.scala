@@ -9,7 +9,8 @@ import akka.http.scaladsl.model.*
 import akka.http.scaladsl.model.HttpMethods.*
 import akka.http.scaladsl.server.*
 import akka.http.scaladsl.server.Directives.*
-import akka.http.scaladsl.settings.{CorsSettings, ServerSettings}
+import akka.http.scaladsl.model.headers.*
+import akka.http.scaladsl.settings.ServerSettings
 import akka.pattern.after
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Sink, Source}
@@ -49,25 +50,19 @@ class WebServer(cfg: CFG, port: Int) {
         )
     }
 
-    val corsSettings = CorsSettings(system.settings.config)
-      .withAllowCredentials(false)
-      .withMaxAge(Duration.Zero)
-      .withAllowAnyOrigin()
-      .withAllowAnyHeader()
-      .withAllowGenericHttpRequests(true)
-      .withAllowedMethods(
-        Set(
-          HttpMethods.GET,
-          HttpMethods.POST,
-          HttpMethods.PUT,
-          HttpMethods.DELETE,
-          HttpMethods.HEAD,
-          HttpMethods.OPTIONS,
-        ),
-      )
+    // permissive CORS without the built-in directive of akka-http 10.6+,
+    // which is not published to Maven Central
+    val corsHeaders = List(
+      `Access-Control-Allow-Origin`.*,
+      `Access-Control-Allow-Methods`(GET, POST, PUT, DELETE, HEAD, OPTIONS),
+      `Access-Control-Allow-Headers`("*"),
+    )
+    def cors(route: Route): Route = respondWithHeaders(corsHeaders) {
+      concat(options(complete(StatusCodes.OK)), route)
+    }
 
     // root router
-    val rootRoute = cors(corsSettings) {
+    val rootRoute = cors {
       withRequestTimeout(30.seconds) {
         withRequestTimeoutResponse { _ =>
           HttpResponse(
