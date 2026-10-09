@@ -42,19 +42,41 @@ trait EffectDecl { self: TyChecker =>
 
     def +(baseTy: String, field: Set[String]) = Effect(map + (baseTy -> field))
 
+    /** effect of writing a field of an object described by `baseTy` */
+    def fieldUpdate(fld: String, baseTy: ValueTy)(using AbsState): Effect =
+      this ⊔ Effect({
+        baseTy.record.bases match
+          case Inf => Map()
+          case Fin(set) =>
+            val baseTys = set.map(ManualInfo.tyModel.baseOf(_))
+            baseTys.map { baseTy => baseTy -> Set(fld) }.toMap
+      })
+
     def nonEmpty: Boolean = map.nonEmpty
 
     private def apply(rec: RecordTy): RecordTy = rec match
-      case RecordTy.Top => rec // unsound here
+      case RecordTy.Top => rec
       case RecordTy.Elem(rmap) => {
         RecordTy(rmap.map((nty, fm) => {
           val base = ManualInfo.tyModel.baseOf(nty)
           val kfield = map.getOrElse(base, Set.empty)
-          nty -> fm.kill(kfield)
+          // nested records may alias the written object
+          val fields = fm.kill(kfield).map.map { (field, binding) =>
+            field -> binding.copy(value = apply(binding.value))
+          }
+          nty -> FieldMap(fields)
         }))
       }
     def apply(ty: ValueTy): ValueTy =
-      ty.copied(record = apply(ty.record))
+      if (isBottom) ty
+      else
+        val newList = ty.list match
+          case ListTy.Elem(elem) => ListTy(apply(elem))
+          case other             => other
+        val newMap = ty.map match
+          case MapTy.Elem(key, value) => MapTy(apply(key), apply(value))
+          case other                  => other
+        ty.copied(record = apply(ty.record), list = newList, map = newMap)
   }
   object Effect extends DomainLike[Effect] {
 

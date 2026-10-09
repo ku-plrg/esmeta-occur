@@ -462,19 +462,17 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           v <- transfer(expr)
           given AbsState <- get
           ty <- get(_.get(x).ty)
-          record = ty.record.update(f, v.ty, refine = false)
-          effect <- get(_.effect)
-          newEffect = Effect({
-            record.bases match
-              case Inf => Map()
-              case Fin(set) =>
-                val baseTys = set.map(ManualInfo.tyModel.baseOf(_))
-                baseTys.map { baseTy => baseTy -> Set(f) }.toMap
-          }) ⊔ effect
-          // _ = println(s"Effect updated to $newEffect")
-          _ <- modify(_.kill(newEffect))
+          // the effect of this write, keyed by the written object's type
+          writeEffect = Effect.Empty.fieldUpdate(f, ty)
+          _ <- modify(_.kill(writeEffect))
+          // stored values and the RHS still describe the heap before this
+          // write, so weaken them before storing the new field type
+          weakenedSt <- get
+          vty = v.kill(writeEffect)(using weakenedSt).ty(using weakenedSt)
+          xty = weakenedSt.get(x).ty(using weakenedSt)
+          record = xty.record.update(f, vty, refine = false)
           _ <- modify(
-            _.update(x, AbsValue(ty.copied(record = record)), refine = false),
+            _.update(x, AbsValue(xty.copied(record = record)), refine = false),
           )
         } yield ()
       case IAssign(ref, expr)  => st => st /* TODO */
