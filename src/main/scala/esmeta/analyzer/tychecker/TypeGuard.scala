@@ -29,11 +29,18 @@ trait TypeGuardDecl { self: TyChecker =>
       if newConstr.nonTop
     } yield dty -> newConstr)
 
-    def kill(effect: Effect): TypeGuard = TypeGuard(for {
-      (dty, constr) <- map
-      newConstr = constr.kill(effect)
-      if newConstr.nonTop
-    } yield dty -> newConstr)
+    /** transport a guard across heap changes described by `effect` */
+    def kill(effect: Effect)(using AbsState): TypeGuard =
+      if (effect.isBottom) this
+      else
+        TypeGuard(for {
+          (dty, constr) <- map
+          // a changed demand type could admit values the old guard did not
+          // cover, so drop entries whose membership is not stable
+          if SymTy.STy(dty.ty).isStable(effect)
+          newConstr = constr.kill(effect)
+          if newConstr.nonTop
+        } yield dty -> newConstr)
 
     def forReturn(symEnv: Map[Sym, ValueTy]): TypeGuard = TypeGuard(for {
       (dty, constr) <- map

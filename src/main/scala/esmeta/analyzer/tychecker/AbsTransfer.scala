@@ -178,11 +178,15 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         callerNp <- callerNps
         nextNp <- getAfterCallNp(callerNp)
       } {
-        given callerSt: AbsState = callInfo(callerNp)
+        val callerSt: AbsState = callInfo(callerNp)
         val retTy = rp.func.retTy.ty.toValue
-        val newV = instantiate(value, callerNp) ⊓ AbsValue(retTy)
-        val nextSt =
-          callerSt.kill(effect).update(callerNp.node.lhs, newV, refine = false)
+        // the caller state after the call: weakened by the callee effect
+        val weakenedSt = callerSt.kill(effect)
+        val newV = {
+          given AbsState = weakenedSt
+          instantiate(value, callerNp, effect) ⊓ AbsValue(retTy)
+        }
+        val nextSt = weakenedSt.update(callerNp.node.lhs, newV, refine = false)
         analyzer += nextNp -> nextSt
       }
     }
@@ -405,13 +409,18 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         (for {
           nextNp <- getAfterCallNp(callerNp)
           callerSt = callInfo(callerNp)
-          given AbsState = callerSt
           retTy = rp.func.retTy.ty.toValue
-          newV = instantiate(value, callerNp) ⊓ AbsValue(retTy)
+          // the caller state after the call: weakened by the callee effect
+          weakenedSt = callerSt.kill(effect)
+          newV = {
+            given AbsState = weakenedSt
+            instantiate(value, callerNp, effect) ⊓ AbsValue(retTy)
+          }
           if !newV.isBottom
-        } yield analyzer += nextNp -> callerSt
-          .kill(effect)
-          .define(callerNp.node.lhs, newV))
+        } yield analyzer += nextNp -> weakenedSt.define(
+          callerNp.node.lhs,
+          newV,
+        ))
           .getOrElse {
             if (!getResult(rp).isBottom) worklist += rp
           }
@@ -1343,6 +1352,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
     def instantiate(
       value: AbsValue,
       callerNp: NodePoint[Call],
+      effect: Effect = Effect.Empty,
     ): AbsValue =
       import DemandType.*
       given callerSt: AbsState = callInfo(callerNp)
@@ -1351,10 +1361,12 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       val map = vs.zipWithIndex.map {
         case (v, i) => i -> v
       }.toMap
-      val newV = instantiate(call, value, map)
+      val newV = instantiate(call, value, map, effect)
+      // bind the caller's constraints as they hold after the call
+      val weakenedSt = callerSt.kill(effect)
       if (inferTypeGuard && useSyntacticKill)
-        newV.lift.killMutable(using callerNp)
-      else if (inferTypeGuard) newV.lift
+        newV.lift(using weakenedSt).killMutable(using callerNp, weakenedSt)
+      else if (inferTypeGuard) newV.lift(using weakenedSt)
       else newV
 
     /** instantiation of abstract values */
@@ -1362,36 +1374,59 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       call: Call,
       value: AbsValue,
       map: Map[Sym, AbsValue],
+      effect: Effect,
     )(using st: AbsState): AbsValue =
       val AbsValue(symty, guard) = value
       val newGuard = TypeGuard((for {
         (dty, constr) <- guard.map
-        newConstr = instantiate(call, constr, map)
+        newConstr = instantiate(call, constr, map, effect)
         if newConstr.nonTop
       } yield dty -> newConstr).toMap)
-      val ivalue @ AbsValue(isymty, iguard) = instantiate(symty, map)
+      // transport argument guards before substituting the symbolic shape
+      val transported = map.map { (sym, value) =>
+        sym -> stableArgument(value, effect)
+          .copy(guard = value.guard.kill(effect))
+      }
+      val ivalue @ AbsValue(isymty, iguard) = instantiate(symty, transported)
       AbsValue(isymty, newGuard && iguard)
+
+    /** keep an argument description only if it still denotes the argument value
+      * after the call; otherwise, fall back to its type, or top
+      */
+    private def stableArgument(value: AbsValue, effect: Effect)(using
+      st: AbsState,
+    ): AbsValue =
+      if (value.symty.isStable(effect)) value
+      else
+        val snapshot = STy(value.ty)
+        value.copy(symty =
+          if (snapshot.isStable(effect)) snapshot else STy(ValueTy.Top),
+        )
 
     /** instantiation of type constraint */
     def instantiate(
       call: Call,
       constr: TypeConstr,
       map: Map[Sym, AbsValue],
-    )(using st: AbsState): TypeConstr = TypeConstr(
-      map = for {
-        case (x: Sym, (ty, prov)) <- constr.map
-        v <- map.get(x)
-        y <- v.symty match
-          case x: SymRef => Some(x)
-          case _         => None
-        (z, zty) <- toBase(y -> ty)
-        if !(st.getTy(z) <= zty)
-      } yield z -> (zty, prov.forReturn(call, zty)),
-      sexpr = for {
-        e <- constr.sexpr
-        newExpr <- instantiate(e, map)
-      } yield newExpr,
-    )
+      effect: Effect,
+    )(using st: AbsState): TypeConstr =
+      val newConstr = TypeConstr(
+        map = for {
+          case (x: Sym, (ty, prov)) <- constr.map
+          v <- map.get(x)
+          y <- v.symty match
+            case x: SymRef => Some(x)
+            case _         => None
+          (z, zty) <- toBase(y -> ty)
+          if !(st.getTy(z) <= zty)
+        } yield z -> (zty, prov.forReturn(call, zty)),
+        sexpr = for {
+          e <- constr.sexpr
+          newExpr <- instantiate(e, map)
+        } yield newExpr,
+      )
+      // the translated constraint describes the heap before the call
+      if (effect.isBottom) newConstr else newConstr.kill(effect)
 
     /** instantiation of symbolic expressions */
     def instantiate(
