@@ -15,8 +15,12 @@ class OpTinyTest extends TyTest {
     checkEqual("and")(
       (ObjectT && FunctionT) -> FunctionT,
       (AbruptT && ReturnT) -> ReturnT,
+      // a constructor keeps the (optional) Construct method in the meet
       (ConstructorT && RecordT("ECMAScriptFunctionObject")) ->
-      RecordT("ECMAScriptFunctionObject"),
+      RecordT(
+        "ECMAScriptFunctionObject",
+        Map("Construct" -> CloT("Record[ECMAScriptFunctionObject].Construct")),
+      ),
       (
         RecordT("IdentifierReferenceRecord", "UnresolvableReferenceRecord") &&
         RecordT(
