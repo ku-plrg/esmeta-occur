@@ -78,8 +78,9 @@ enum RecordTy extends TyElem with Lattice[RecordTy] {
           ) ++ rns.filter(r =>
             isSubTy(r, lns) && checkValidWithBaseFieldMap(r, lfmMap),
           )
-          lfm = lmap.getOrElse(t, FieldMap.Top)
-          rfm = rmap.getOrElse(t, FieldMap.Top)
+          // field constraints of supertypes on each side also apply to `t`
+          lfm = ancestorsOf(t).flatMap(lmap.get).foldLeft(FieldMap.Top)(_ && _)
+          rfm = ancestorsOf(t).flatMap(rmap.get).foldLeft(FieldMap.Top)(_ && _)
           fm = lfm && rfm
           pair <- RecordTy.update(t, fm, refine = true)
         } yield pair)
