@@ -341,18 +341,20 @@ trait TypeGuardDecl { self: TyChecker =>
     // Infer a consistent boolean truth value from leaves, when available.
     // Returns Some(true/false) only if all annotated leaves agree; otherwise None.
     final def truthOpt: Option[Boolean] = this match
-      case Leaf(_, _, _, truth) => truth
+      case Leaf(_, _, _, truth)  => truth
       case CallPath(_, _, child) => child.truthOpt
       case Join(children) =>
         val ts = children.flatMap(_.truthOpt)
         if (ts.isEmpty) None
-        else if (ts.forall(_ == ts.head)) Some(ts.head) else None
+        else if (ts.forall(_ == ts.head)) Some(ts.head)
+        else None
       case Meet(children) =>
         val ts = children.flatMap(_.truthOpt)
         if (ts.isEmpty) None
-        else if (ts.forall(_ == ts.head)) Some(ts.head) else None
+        else if (ts.forall(_ == ts.head)) Some(ts.head)
+        else None
       case RefinePoint(_, child, _, _, _, _) => child.truthOpt
-      case Provenance.Bot | Provenance.Top => None
+      case Provenance.Bot | Provenance.Top   => None
 
     // simple explanation is bigger (imprecise)
     def <=(that: Provenance): Boolean = {
@@ -387,7 +389,10 @@ trait TypeGuardDecl { self: TyChecker =>
 
       // this and that are not subsumption of each other
       (this, that) match
-        case (Leaf(lnode, lbase, lty, ltruth), Leaf(rnode, rbase, rty, rtruth)) =>
+        case (
+              Leaf(lnode, lbase, lty, ltruth),
+              Leaf(rnode, rbase, rty, rtruth),
+            ) =>
           if lnode == rnode then
             val base = if (lbase == rbase) lbase else None
             val truth = if (ltruth == rtruth) ltruth else None
@@ -415,7 +420,10 @@ trait TypeGuardDecl { self: TyChecker =>
 
       // this and that are not subsumption of each other
       (this, that) match
-        case (Leaf(lnode, lbase, lty, ltruth), Leaf(rnode, rbase, rty, rtruth)) =>
+        case (
+              Leaf(lnode, lbase, lty, ltruth),
+              Leaf(rnode, rbase, rty, rtruth),
+            ) =>
           if lnode == rnode then
             val base = if (lbase == rbase) lbase else None
             val truth = if (ltruth == rtruth) ltruth else None
@@ -530,7 +538,8 @@ trait TypeGuardDecl { self: TyChecker =>
     def size: Int = 0
     def depth: Int = 0
     def leafCnt: Int = 0
-    override def toString: String = s"$name: No explanation provided (too complex)"
+    override def toString: String =
+      s"$name: No explanation provided (too complex)"
     def toTree(indent: Int): String = s"${"  " * indent}$toString"
   }
 
@@ -588,10 +597,10 @@ trait TypeGuardDecl { self: TyChecker =>
     child: Provenance,
     base: Option[Base] = None,
     branch: Option[Boolean] = None,
-    refined: Option[ValueTy] = None,      // e.g., True/False for branch condition
-    varRefined: Option[ValueTy] = None,   // refined variable type to show in header
-  )
-    extends Provenance {
+    refined: Option[ValueTy] = None, // e.g., True/False for branch condition
+    varRefined: Option[ValueTy] =
+      None, // refined variable type to show in header
+  ) extends Provenance {
     lazy val ty: ValueTy = child.ty
     def size: Int = child.size
     def depth: Int = child.depth
@@ -642,14 +651,15 @@ trait TypeGuardDecl { self: TyChecker =>
       case CallPath(call, _, child) =>
         // Detect direct calls to a target algorithm by closure name or SDO method
         val direct = call.callInst match
-          case ICall(_, fexpr, _) => fexpr match
+          case ICall(_, fexpr, _) =>
+            fexpr match
               case EClo(fn, _) => fn == fname
               case ECont(_)    => false
               case _           => false
           case ISdoCall(_, _, method, _) => method == fname
         direct || involvesFunc(child, fname)
-      case Join(children)        => children.exists(involvesFunc(_, fname))
-      case Meet(children)        => children.exists(involvesFunc(_, fname))
+      case Join(children) => children.exists(involvesFunc(_, fname))
+      case Meet(children) => children.exists(involvesFunc(_, fname))
       case RefinePoint(target, child, _, _, _, _) =>
         val f = target.func
         f.name == fname || f.irFunc.name == fname || involvesFunc(child, fname)
@@ -693,8 +703,7 @@ trait TypeGuardDecl { self: TyChecker =>
   //   app >> "(! " >> expr >> ")"
 
   /** Provenance pretty printer (spec-like) */
-  given Rule[Provenance] = (app, prov) =>
-    ProvTextPrinter.print(app, prov)
+  given Rule[Provenance] = (app, prov) => ProvTextPrinter.print(app, prov)
 
   /** TypeConstr */
   given Rule[TypeConstr] = (app, constr) =>
@@ -738,13 +747,14 @@ trait TypeGuardDecl { self: TyChecker =>
   object ProvPrinter {
     def getId(prov: Provenance): String =
       prov match
-        case Leaf(node, _, ty, _)       => norm(s"Leaf${node.id}")
-        case CallPath(call, ty, child)  => norm(s"call${call.id}")
-        case Join(child)                => norm(s"join${child.hashCode()}")
-        case Meet(child)                => norm(s"meet${child.hashCode()}")
-        case RefinePoint(target, _, _, _, _, _) => norm(s"refine${target.node.id}")
-        case Provenance.Bot             => ???
-        case Provenance.Top             => ???
+        case Leaf(node, _, ty, _)      => norm(s"Leaf${node.id}")
+        case CallPath(call, ty, child) => norm(s"call${call.id}")
+        case Join(child)               => norm(s"join${child.hashCode()}")
+        case Meet(child)               => norm(s"meet${child.hashCode()}")
+        case RefinePoint(target, _, _, _, _, _) =>
+          norm(s"refine${target.node.id}")
+        case Provenance.Bot => ???
+        case Provenance.Top => ???
 
     /** Colors */
     val NODE_COLOR = """"black""""
@@ -770,7 +780,7 @@ trait TypeGuardDecl { self: TyChecker =>
         case Meet(child) =>
           child.foreach(drawProvenance)
         case RefinePoint(target, child, _, _, _, _) => drawProvenance(child)
-        case _                          => ()
+        case _                                      => ()
 
     def drawProvenanceNode(prov: Provenance)(using Appender): Unit =
       prov match
@@ -880,7 +890,7 @@ trait TypeGuardDecl { self: TyChecker =>
     private def stepSeqOf(prov: Provenance): Option[List[Int]] = prov match
       case RefinePoint(target, child, _, _, _, _) => stepSeqOf(target.node)
       case Leaf(node, _, _, _)                    => stepSeqOf(node)
-      case CallPath(call, _, child)               => stepSeqOf(call).orElse(stepSeqOf(child))
+      case CallPath(call, _, child) => stepSeqOf(call).orElse(stepSeqOf(child))
       case Join(children) =>
         val seqs = children.toList.flatMap(stepSeqOf)
         if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
@@ -913,7 +923,8 @@ trait TypeGuardDecl { self: TyChecker =>
           render(app, prov, 0)
       app
 
-    private def indent(depth: Int): String = if depth <= 0 then "" else ("| " * depth)
+    private def indent(depth: Int): String =
+      if depth <= 0 then "" else ("| " * depth)
 
     private def prettyBase(base: Base, node: Node): String = base match
       case x: Local => x.toString
@@ -921,10 +932,7 @@ trait TypeGuardDecl { self: TyChecker =>
         val func = cfg.funcOf(node)
         val entrySt = getResult(NodePoint(func, func.entry, emptyView))
         val opt = entrySt.locals.collectFirst {
-          case (lx, v) if v.symty match
-              case SSym(ss) if ss == s => true
-              case _                   => false
-          => lx
+          case (lx, AbsValue(SSym(ss), _)) if ss == s => lx
         }
         opt.map(_.toString).getOrElse("#" + s.toString)
 
@@ -939,8 +947,16 @@ trait TypeGuardDecl { self: TyChecker =>
       prov match
         case Placeholder(name) =>
           app :> s"${indent(depth)}$name: No explanation provided (too complex)"
-        case RefinePoint(target, child, baseOpt, branchOpt, refinedOpt, varRefinedOpt) =>
-          val baseStr = baseOpt.map(b => s"`${prettyBase(b, target.node)}`").getOrElse("<>")
+        case RefinePoint(
+              target,
+              child,
+              baseOpt,
+              branchOpt,
+              refinedOpt,
+              varRefinedOpt,
+            ) =>
+          val baseStr =
+            baseOpt.map(b => s"`${prettyBase(b, target.node)}`").getOrElse("<>")
           val refinedStr =
             varRefinedOpt
               .orElse(refinedOpt)
@@ -949,14 +965,18 @@ trait TypeGuardDecl { self: TyChecker =>
           val stepStr = target.node.loc.map(_.stepString)
           val head =
             (indent(depth) + s"$baseStr is $refinedStr" +
-              stepStr
-                .map(s => s" in the ${branchStr.getOrElse("?")} branch of step $s")
-                .getOrElse(""))
+            stepStr
+              .map(s =>
+                s" in the ${branchStr.getOrElse("?")} branch of step $s",
+              )
+              .getOrElse(""))
           app :> head
           // Print spec excerpt as a comment
-          specLine(target.node).map { line =>
-            app :> s"${indent(depth)}  // $line"
-          }.getOrElse(())
+          specLine(target.node)
+            .map { line =>
+              app :> s"${indent(depth)}  // $line"
+            }
+            .getOrElse(())
           // Pass base context down so Meet can show concise summaries
           render(app, child, depth, baseOpt.map(b => (target.node, b)))
 
@@ -976,9 +996,11 @@ trait TypeGuardDecl { self: TyChecker =>
               val baseStr = s"`${prettyBase(base, nd)}`"
               val truthWord = if b then "True" else "False"
               app :> s"${indent(depth)}* $baseStr is ${showTy(cty)} because `${callSig(call)}` is $truthWord"
-              specLine(call).map { line =>
-                app :> s"${indent(depth)}  // $line"
-              }.getOrElse(())
+              specLine(call)
+                .map { line =>
+                  app :> s"${indent(depth)}  // $line"
+                }
+                .getOrElse(())
             }
           }
           val callLine = callSig(call)
@@ -986,39 +1008,51 @@ trait TypeGuardDecl { self: TyChecker =>
           render(app, child, depth + 1, baseCtx)
 
         case Leaf(node, baseOpt, ty, truthOpt) =>
-          val baseStr = baseOpt.map(b => s"`${prettyBase(b, node)}`").getOrElse("<>")
+          val baseStr =
+            baseOpt.map(b => s"`${prettyBase(b, node)}`").getOrElse("<>")
           val line = specLine(node)
           val reason = originSnippet(node)
-            .orElse(line.flatMap(extractCond).orElse(line.map(Loc.dropStepPrefix)))
-          val suffix = truthOpt.map(b => if b then " is True" else " is False").getOrElse("")
+            .orElse(
+              line.flatMap(extractCond).orElse(line.map(Loc.dropStepPrefix)),
+            )
+          val suffix = truthOpt
+            .map(b => if b then " is True" else " is False")
+            .getOrElse("")
           val because = reason.map(c => s" because `$c`$suffix").getOrElse("")
           app :> s"${indent(depth)}* [ORIGIN] $baseStr is ${showTy(ty)}$because"
           // spec comment
-          line.map { line =>
-            app :> s"${indent(depth)}  // $line"
-          }.getOrElse(())
+          line
+            .map { line =>
+              app :> s"${indent(depth)}  // $line"
+            }
+            .getOrElse(())
 
         case _ => ()
 
     private def containsPlaceholder(prov: Provenance): Boolean = prov match
-      case Placeholder(_)                 => true
+      case Placeholder(_)                    => true
       case RefinePoint(_, child, _, _, _, _) => containsPlaceholder(child)
-      case CallPath(_, _, child)          => containsPlaceholder(child)
-      case Join(children)                 => children.exists(containsPlaceholder)
-      case Meet(children)                 => children.exists(containsPlaceholder)
-      case _                              => false
+      case CallPath(_, _, child)             => containsPlaceholder(child)
+      case Join(children) => children.exists(containsPlaceholder)
+      case Meet(children) => children.exists(containsPlaceholder)
+      case _              => false
 
-    private def findPlaceholderName(prov: Provenance): Option[String] = prov match
-      case Placeholder(name)                 => Some(name)
-      case RefinePoint(_, child, _, _, _, _) => findPlaceholderName(child)
-      case CallPath(_, _, child)             => findPlaceholderName(child)
-      case Join(children) => children.toList.flatMap(findPlaceholderName).headOption
-      case Meet(children) => children.toList.flatMap(findPlaceholderName).headOption
-      case _ => None
+    private def findPlaceholderName(prov: Provenance): Option[String] =
+      prov match
+        case Placeholder(name)                 => Some(name)
+        case RefinePoint(_, child, _, _, _, _) => findPlaceholderName(child)
+        case CallPath(_, _, child)             => findPlaceholderName(child)
+        case Join(children) =>
+          children.toList.flatMap(findPlaceholderName).headOption
+        case Meet(children) =>
+          children.toList.flatMap(findPlaceholderName).headOption
+        case _ => None
 
     private def algoCode(func: Func): Option[String] =
       // Prefer raw spec text to preserve wording like "If ... then".
-      cfg.spec.fnameMap.get(func.irFunc.name).map(_.code)
+      cfg.spec.fnameMap
+        .get(func.irFunc.name)
+        .map(_.code)
         .orElse(func.irFunc.algo.map(_.code))
 
     // Remove ecmarkup decorations (e.g., [id="..."], <emu-...> wrappers) while preserving inner text
@@ -1052,8 +1086,6 @@ trait TypeGuardDecl { self: TyChecker =>
       func = cfg.funcOf(node)
       code <- algoCode(func)
     } yield sanitizeSpec(Loc.oneLine(loc.getString(code)))
-
-    
 
     // Try to extract the condition from an "If <cond>, ..." line
     private def extractCond(s: String): Option[String] =

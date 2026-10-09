@@ -96,7 +96,10 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       // per-function provenance log file for those functions.
       val tname = target.func.name
       val irname = target.func.irFunc.name
-      if (Provenance.isExceptionName(tname) || Provenance.isExceptionName(irname)) return
+      if (
+        Provenance.isExceptionName(tname) ||
+        Provenance.isExceptionName(irname)
+      ) return
       for {
         (x, v) <- st.locals
         ty = v.ty(using st)

@@ -290,7 +290,7 @@ class TyChecker(
               silent = true,
             )
           }
-          
+
           dumpFile(
             name = "provenance graph",
             data = sizeAndDepth,
@@ -364,8 +364,8 @@ class TyChecker(
   def provString: String =
     // Pretty print each provenance entry as a self-contained block
     val app = new Appender
-    val entries = provenances.toList.sortBy { case ((t, _, ty), _) =>
-      (t.func, t.node.id, ty.toString())
+    val entries = provenances.toList.sortBy {
+      case ((t, _, ty), _) => (t.func, t.node.id, ty.toString())
     }
     for (((_, _, _), prov) <- entries) {
       app >> prov

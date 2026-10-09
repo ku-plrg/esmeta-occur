@@ -84,8 +84,7 @@ case class Loc(
       found = code.indexOf(prefix, from)
     // if none found before, fallback to first occurrence
     if idx == -1 then idx = code.indexOf(prefix)
-    if idx == -1 then
-      Some(Loc.oneLine(replaceStepPrefix(getLine(code))))
+    if idx == -1 then Some(Loc.oneLine(replaceStepPrefix(getLine(code))))
     else
       val lineStart = code.lastIndexOf('\n', idx) match
         case -1 => 0
@@ -96,7 +95,7 @@ case class Loc(
       val raw = code.substring(lineStart, lineEnd)
       Some(Loc.oneLine(replaceStepPrefix(raw)))
 
-  /** Replace a fixed numeric step at the beginning of a line with this loc's step */
+  /** Replace a fixed numeric step prefix with this loc's step */
   def replaceStepPrefix(line: String): String =
     val major = stepString.takeWhile(_.isDigit) match
       case s if s.nonEmpty => s
@@ -104,7 +103,7 @@ case class Loc(
     val StepNum = "^(\\s*)(\\d+)(\\.\\s+)(.*)$".r
     line match
       case StepNum(ws, _, dotSpace, rest) => s"$ws$major$dotSpace$rest"
-      case _                               => line
+      case _                              => line
 
   /** merge locations */
   def merge(that: Loc): Option[Loc] =
@@ -125,6 +124,7 @@ case class Loc(
 }
 
 object Loc {
+
   /** sanitize a string to a single line */
   def oneLine(s: String): String =
     s.replace("\r", " ").replace("\n", " ").trim
