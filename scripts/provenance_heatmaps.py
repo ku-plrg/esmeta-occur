@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib as mpl
 from pathlib import Path
+import argparse
+
+# Optional caps: values >= cap are binned into the last cell (labeled "N+")
+_args = argparse.ArgumentParser()
+_args.add_argument("--cap-size", type=int, default=None)
+_args.add_argument("--cap-leaf", type=int, default=None)
+CAPS = {"Size": _args.parse_args().cap_size, "Leaf Count": _args.parse_args().cap_leaf}
 
 # Publication-friendly font & proper PDF embedding
 mpl.rcParams["font.family"] = "Helvetica"     # fallback to Arial if missing
@@ -23,6 +30,10 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
     df[y_name] = pd.to_numeric(df[y_name], errors="coerce")
     df["cnt"]  = pd.to_numeric(df["cnt"],  errors="coerce").fillna(0)
     df = df.dropna(subset=[x_name, y_name])
+    for col in (x_name, y_name):
+        if CAPS.get(col) is not None:
+            df[col] = df[col].clip(upper=CAPS[col])
+    df = df.groupby([x_name, y_name], as_index=False)["cnt"].sum()
 
     # Define full integer ranges so no "middle" labels are skipped
     x_min, x_max = int(df[x_name].min()), int(df[x_name].max())
@@ -63,8 +74,11 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
     # Force every tick to render; no skipping in the middle
     ax.set_xticks(np.arange(len(x_vals)) + 0.5)
     ax.set_yticks(np.arange(len(y_vals)) + 0.5)
-    ax.set_xticklabels(x_vals, rotation=0)
-    ax.set_yticklabels(y_vals, rotation=0)
+    def labels(vals, name):
+        cap = CAPS.get(name)
+        return [f"{v}+" if cap is not None and v == cap else str(v) for v in vals]
+    ax.set_xticklabels(labels(x_vals, x_name), rotation=0)
+    ax.set_yticklabels(labels(y_vals, y_name), rotation=0)
 
     ax.set_xlabel(x_name, fontsize=15, fontweight="bold")
     ax.set_ylabel(y_name, fontsize=15, fontweight="bold")
