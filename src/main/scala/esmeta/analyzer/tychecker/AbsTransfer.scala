@@ -172,7 +172,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
 
     /** transfer function for return points */
     def apply(rp: ReturnPoint): Unit = if (!canUseReturnTy(rp.func)) {
-      var AbsRet(value, effect) = getResult(rp)
+      val AbsRet(value, effect) = callResult(rp)
       for {
         callerNps <- retEdges.get(rp)
         callerNp <- callerNps
@@ -190,6 +190,13 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         analyzer += nextNp -> nextSt
       }
     }
+
+    /** callee result as seen by callers: an invalidating call may write
+      * anything
+      */
+    def callResult(rp: ReturnPoint): AbsRet =
+      val ret = getResult(rp)
+      if (useInvalidateCall) ret.copy(effect = Effect.Invalidate) else ret
 
     /** get after call node point */
     def getAfterCallNp(callerNp: NodePoint[Call]): Option[NodePoint[Node]] =
@@ -274,17 +281,24 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       if (canUseReturnTy(callee)) {
         val call = callerNp.node
         val retTy = callee.retTy.ty.toValue
-        val newRetV = (for {
-          refiner <- manualRefiners.get(callee.name)
-          v = refiner(callee, vs, retTy, callerSt)
-          newV = instantiate(v, callerNp)
-        } yield newV).getOrElse {
-          val v = AbsValue(retTy)
-          v.lift
+        // a typed callee has no analyzed effect, but an invalidating call still
+        // invalidates every field proposition of the caller
+        val afterSt =
+          if (useInvalidateCall) callerSt.kill(Effect.Invalidate) else callerSt
+        val newRetV = {
+          given AbsState = afterSt
+          (for {
+            refiner <- manualRefiners.get(callee.name)
+            v = refiner(callee, vs, retTy, afterSt)
+            newV = instantiate(v, callerNp)
+          } yield newV).getOrElse {
+            val v = AbsValue(retTy)
+            v.lift
+          }
         }
         for {
           nextNp <- getAfterCallNp(callerNp)
-          newSt = callerSt.define(call.lhs, newRetV.killMutable(using callerNp))
+          newSt = afterSt.define(call.lhs, newRetV.killMutable(using callerNp))
         } analyzer += nextNp -> newSt
       }
       // get locals
@@ -405,7 +419,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
     /** propagate callee analysis result */
     def propagate(rp: ReturnPoint, callerNp: NodePoint[Call]): Unit = {
       if (!canUseReturnTy(rp.func)) {
-        val AbsRet(value, effect) = getResult(rp)
+        val AbsRet(value, effect) = callResult(rp)
         (for {
           nextNp <- getAfterCallNp(callerNp)
           callerSt = callInfo(callerNp)

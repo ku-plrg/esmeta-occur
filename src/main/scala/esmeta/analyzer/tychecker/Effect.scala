@@ -7,15 +7,25 @@ import esmeta.util.*
 /** abstract return values */
 trait EffectDecl { self: TyChecker =>
 
-  case class Effect(map: Map[String, Set[String]] = Map()) extends EffectLike {
+  /** `invalidate` describes a call that may write any field of any object (the
+    * Flow-style invalidation of every field proposition)
+    */
+  case class Effect(
+    map: Map[String, Set[String]] = Map(),
+    invalidate: Boolean = false,
+  ) extends EffectLike {
     import Effect.*
 
     /** bottom check */
-    def isBottom: Boolean = map.isEmpty
+    def isBottom: Boolean = map.isEmpty && !invalidate
+
+    /** whether a field may be written */
+    def writes(field: String): Boolean =
+      invalidate || map.values.exists(_.contains(field))
 
     /** partial order */
     def ⊑(that: Effect)(using AbsState): Boolean =
-      this.map.forall {
+      (!this.invalidate || that.invalidate) && this.map.forall {
         case (k, v) => (that.map.contains(k) && v.subsetOf(that.map(k)))
       }
 
@@ -29,6 +39,7 @@ trait EffectDecl { self: TyChecker =>
           k <- this.map.keySet ++ that.map.keySet
         } yield k -> (this.map.getOrElse(k, Set.empty) ++ that.map
           .getOrElse(k, Set.empty))).toMap,
+        this.invalidate || that.invalidate,
       )
 
     /** meet operator */
@@ -38,9 +49,11 @@ trait EffectDecl { self: TyChecker =>
           k <- this.map.keySet intersect that.map.keySet
         } yield k -> (this.map.getOrElse(k, Set.empty) intersect that.map
           .getOrElse(k, Set.empty))).toMap,
+        this.invalidate && that.invalidate,
       )
 
-    def +(baseTy: String, field: Set[String]) = Effect(map + (baseTy -> field))
+    def +(baseTy: String, field: Set[String]) =
+      Effect(map + (baseTy -> field), invalidate)
 
     /** effect of writing a field of an object described by `baseTy` */
     def fieldUpdate(fld: String, baseTy: ValueTy)(using AbsState): Effect =
@@ -59,7 +72,8 @@ trait EffectDecl { self: TyChecker =>
       case RecordTy.Elem(rmap) => {
         RecordTy(rmap.map((nty, fm) => {
           val base = ManualInfo.tyModel.baseOf(nty)
-          val kfield = map.getOrElse(base, Set.empty)
+          val kfield =
+            if (invalidate) fm.map.keySet else map.getOrElse(base, Set.empty)
           // nested records may alias the written object
           val fields = fm.kill(kfield).map.map { (field, binding) =>
             field -> binding.copy(value = apply(binding.value))
@@ -88,9 +102,13 @@ trait EffectDecl { self: TyChecker =>
 
     lazy val Empty: Effect = Effect()
 
+    /** any field of any object may be written */
+    lazy val Invalidate: Effect = Effect(invalidate = true)
+
     /** appender */
     private given Rule[Set[String]] = iterableRule("(", ", ", ")")
     private given Rule[Map[String, Set[String]]] = sortedMapRule(sep = " -> ")
-    given rule: Rule[Effect] = (app, elem) => app >> elem.map
+    given rule: Rule[Effect] = (app, elem) =>
+      if (elem.invalidate) app >> "invalidate" else app >> elem.map
   }
 }

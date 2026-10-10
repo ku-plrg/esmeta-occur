@@ -26,6 +26,7 @@ case object TyCheck extends Phase[CFG, Unit] {
       useBooleanGuard = !config.noRefine && config.useBooleanGuard,
       useProvenance = config.useProvenance,
       useSyntacticKill = config.useSyntacticKill,
+      useInvalidateCall = config.useInvalidateCall,
       noRefine = config.noRefine,
       typeSens = config.typeSens,
       config = TyChecker.Config(),
@@ -99,6 +100,11 @@ case object TyCheck extends Phase[CFG, Unit] {
       "use syntactic kill for type checking(as Kent's work).",
     ),
     (
+      "invalidate-call",
+      BoolOption(_.useInvalidateCall = _),
+      "drop every field proposition at each call (as Flow's invalidation).",
+    ),
+    (
       "use-boolean-guard",
       BoolOption(_.useBooleanGuard = _),
       "use boolean guard for type checking.",
@@ -122,6 +128,7 @@ case object TyCheck extends Phase[CFG, Unit] {
     var useBooleanGuard: Boolean = false,
     var useProvenance: Boolean = false,
     var useSyntacticKill: Boolean = false,
+    var useInvalidateCall: Boolean = false,
     var noRefine: Boolean = false,
   )
 }

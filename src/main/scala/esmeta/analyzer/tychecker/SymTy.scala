@@ -61,7 +61,7 @@ trait SymTyDecl { self: TyChecker =>
       * effect, i.e., its read footprint is disjoint from the effect
       */
     def isStable(effect: Effect)(using st: AbsState): Boolean =
-      val written = effect.map.values.flatten.toSet
+      def written(field: String): Boolean = effect.writes(field)
 
       def stableType(ty: ValueTy, seen: Set[ValueTy] = Set()): Boolean =
         if (seen.contains(ty)) false
@@ -73,7 +73,7 @@ trait SymTyDecl { self: TyChecker =>
                 val fields =
                   ManualInfo.tyModel.fieldsOf(name).toList ++ fm.map.toList
                 fields.forall { (field, binding) =>
-                  !written.contains(field) &&
+                  !written(field) &&
                   stableType(binding.value, seen + ty)
                 }
               }
@@ -92,14 +92,14 @@ trait SymTyDecl { self: TyChecker =>
         case SVar(_) | SSym(_) => true
         case SField(base, field) =>
           stable(base) && stable(field) && (field.ty.getSingle match
-            case One(Str(name)) => !written.contains(name)
+            case One(Str(name)) => !written(name)
             case _              => false
           )
         case SNormal(inner) =>
-          !Set("Type", "Value", "Target").exists(written.contains) &&
+          !Set("Type", "Value", "Target").exists(written) &&
           stable(inner)
 
-      written.isEmpty || stable(this)
+      effect.isBottom || stable(this)
 
     def kill(bases: Set[Base], update: Boolean): Option[SymTy] = this match
       case t: SymRef      => killRef(t, bases, update)
