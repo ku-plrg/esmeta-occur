@@ -441,6 +441,29 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       }
     }
 
+    /** weaken the state by a write to the field reference `ref` */
+    private def weaken(ref: Ref)(using np: NodePoint[?]): Updater =
+      def effectOf(ref: Ref): Result[Effect] = ref match
+        case Field(base, fexpr) =>
+          for {
+            bv <- transfer(ERef(base))
+            fv <- transfer(fexpr)
+            given AbsState <- get
+            // unknown field name: every field of the base object
+            own = fv.ty.str.getSingle match
+              case One(f) => Effect.Empty.fieldUpdate(f, bv.ty)
+              case _      => Effect.Empty.allFieldsUpdate(bv.ty)
+            // a list or map in a field is changed in place
+            outer <-
+              if (bv.ty.list.isBottom && bv.ty.map.isBottom) pure(Effect.Empty)
+              else effectOf(base)
+          } yield own ⊔ outer
+        case _ => pure(Effect.Empty)
+      for {
+        effect <- effectOf(ref)
+        _ <- modify(_.kill(effect))
+      } yield ()
+
     /** transfer function for normal instructions */
     def transfer(
       inst: NormalInst,
@@ -489,9 +512,22 @@ trait AbsTransferDecl { analyzer: TyChecker =>
             _.update(x, AbsValue(xty.copied(record = record)), refine = false),
           )
         } yield ()
-      case IAssign(ref, expr)  => st => st /* TODO */
-      case IExpand(base, expr) => st => st /* TODO */
-      case IDelete(base, expr) => st => st /* TODO */
+      case IAssign(ref @ Field(x: Local, _), expr) =>
+        for {
+          v <- transfer(expr)
+          _ <- weaken(ref)
+          // writing an element of a local list joins its element type
+          given AbsState <- get
+          l <- transfer(ERef(x))
+          _ <-
+            if (l.ty.list.isBottom) pure(())
+            else
+              val lty = l.ty.copied(list = ListT(l.ty.list.elem || v.ty).list)
+              modify(_.update(x, AbsValue(lty), refine = false))
+        } yield ()
+      case IAssign(ref, expr)  => weaken(ref)
+      case IExpand(base, expr) => weaken(Field(base, expr))
+      case IDelete(base, expr) => weaken(Field(base, expr))
       case IPush(expr, ERef(list: Local), _) =>
         for {
           given AbsState <- get
@@ -501,7 +537,8 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           newV = AbsValue(ListT(elem))
           _ <- modify(_.update(list, newV, refine = false))
         } yield ()
-      case IPush(expr, list, _) => st => st /* TODO */
+      case IPush(expr, ERef(list), _) => weaken(list)
+      case IPush(expr, list, _)       => modify(_.kill(Effect.Invalidate))
       case IPop(lhs, list, front) =>
         for {
           v <- transfer(list)

@@ -3,6 +3,7 @@ package esmeta.analyzer.tychecker
 import esmeta.util.Appender.*
 import esmeta.ty.*
 import esmeta.util.*
+import esmeta.util.BaseUtils.cached
 
 /** abstract return values */
 trait EffectDecl { self: TyChecker =>
@@ -59,6 +60,10 @@ trait EffectDecl { self: TyChecker =>
     def fieldUpdate(fld: String, baseTy: ValueTy)(using AbsState): Effect =
       this ⊔ Effect(basesOf(baseTy).map(_ -> Set(fld)).toMap)
 
+    /** effect of writing an unknown field of an object described by `baseTy` */
+    def allFieldsUpdate(baseTy: ValueTy)(using AbsState): Effect =
+      this ⊔ Effect(basesOf(baseTy).map(b => b -> declaredFieldsOf(b)).toMap)
+
     /** base types of an object (every base type if unknown) */
     private def basesOf(baseTy: ValueTy): Set[String] =
       baseTy.record.bases match
@@ -108,6 +113,14 @@ trait EffectDecl { self: TyChecker =>
     /** all base types */
     lazy val allBases: Set[String] =
       ManualInfo.tyModel.declMap.keySet.map(ManualInfo.tyModel.baseOf(_))
+
+    /** all fields declared for a base type and its subtypes */
+    lazy val declaredFieldsOf: String => Set[String] = cached { base =>
+      val tyModel = ManualInfo.tyModel
+      (tyModel.strictSubTysOf(base) + base).flatMap(
+        tyModel.ownFieldsOf(_).keySet,
+      )
+    }
 
     /** appender */
     private given Rule[Set[String]] = iterableRule("(", ", ", ")")
