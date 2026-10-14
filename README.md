@@ -65,7 +65,18 @@ The results are collected in `result/<setting>/summary.tsv`, one row per version
 - `# errors`: the number of alarms (Figure 16).
 - `iter` and `duration (ms)`: the number of iterations and the analysis time (Figure 17).
 
-The true positives (34 specification bugs in Table 2) were classified by hand. Precision in Figure 16 is the number of true positives divided by `# errors` for each version.
+### From the raw results to the numbers and figures
+
+`eval/result/<setting>/summary.tsv` holds the results of our run of `benchmark.sh` (seven settings, 253 versions). `eval/tp.tsv` gives the number of true positives per version: the 34 specification bugs in Table 2 were classified by hand, and a version counts a bug until the version that fixes it. The scripts in `eval/` need `pandas` and `matplotlib`:
+
+```sh
+cd eval
+python3 summarize.py    # average alarms, FP, precision, FP reduction, iteration and time ratios
+python3 draw_alarm.py   # Figure 16: fig/alarm/*.pdf and fig/prec.pdf
+python3 draw_perf.py    # Figure 17: fig/perf/iter.pdf and fig/perf/time.pdf
+```
+
+Precision is the average over versions of `TP / # errors`. To regenerate the figures from your own run, copy `result/<setting>/summary.tsv` of `benchmark.sh` into `eval/result/<setting>/` and run the scripts again.
 
 ### Provenance heatmaps (Figure 18)
 
