@@ -1,0 +1,70 @@
+--- types
++++ types
+@@ -504,7 +504,7 @@
+   GlobalObject: Record[Object];
+   GlobalEnv: Record[GlobalEnvironmentRecord];
+   TemplateMap: List[Record[{ Site: Ast[TemplateLiteral], Array: Record[Array] }]];
+-  LoadedModules: List[Record[{ Specifier: String, Module: Record[ModuleRecord] }]];
++  LoadedModules: List[Record[LoadedModuleRequestRecord]];
+   HostDefined: Undefined;
+ }
+ 
+@@ -612,7 +612,7 @@
+ type ScriptRecord {
+   Realm: Record[RealmRecord] | Undefined;
+   ECMAScriptCode: Ast[Script];
+-  LoadedModules: List[Record[{ Specifier: String, Module: Record[ModuleRecord] }]];
++  LoadedModules: List[Record[LoadedModuleRequestRecord]];
+   HostDefined: Enum[~empty~];
+ }
+ 
+@@ -646,8 +646,8 @@
+   EvaluationError: Abrupt[throw] | Enum[~empty~];
+   DFSIndex: Enum[~empty~] | Int;
+   DFSAncestorIndex: Enum[~empty~] | Int;
+-  RequestedModules: List[String];
+-  LoadedModules: List[Record[{ Specifier: String, Module: Record[ModuleRecordN] }]];
++  RequestedModules: List[Record[ModuleRequestRecord]];
++  LoadedModules: List[Record[LoadedModuleRequestRecord]];
+   CycleRoot: Record[CyclicModuleRecord] | Enum[~empty~];
+   HasTLA: Boolean;
+   AsyncEvaluation: Boolean;
+@@ -686,9 +686,28 @@
+   BindingName: String | Enum[~namespace~];
+ }
+ 
++// https://tc39.es/ecma262/#modulerequest-record
++type ModuleRequestRecord {
++  Specifier: String;
++  Attributes: List[Record[ImportAttributeRecord]];
++}
++
++// https://tc39.es/ecma262/#loadedmodulerequest-record
++type LoadedModuleRequestRecord {
++  Specifier: String;
++  Attributes: List[Record[ImportAttributeRecord]];
++  Module: Record[ModuleRecord];
++}
++
++// https://tc39.es/ecma262/#importattribute-record
++type ImportAttributeRecord {
++  Key: String;
++  Value: String;
++}
++
+ // https://tc39.es/ecma262/#importentry-record
+ type ImportEntryRecord {
+-  ModuleRequest: String;
++  ModuleRequest: Record[ModuleRequestRecord];
+   ImportName: String | Enum[~namespace-object~];
+   LocalName: String;
+ }
+@@ -696,7 +715,7 @@
+ // https://tc39.es/ecma262/#exportentry-record
+ type ExportEntryRecord {
+   ExportName: String | Null;
+-  ModuleRequest: String | Null;
++  ModuleRequest: Record[ModuleRequestRecord] | Null;
+   ImportName: String | Null | Enum[~all~, ~all-but-default~];
+   LocalName: String | Null;
+ }

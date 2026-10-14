@@ -35,10 +35,35 @@ object ManualInfo {
       case _             => None
   } yield hash -> file.toString).toMap
 
+  /** patches of the type model for the target version, set by the extractor
+    * before the type model is used. Each file `<n>-<commit>.diff` in
+    * `types-patch` is a unified diff of `types` for the commit and its
+    * descendants, applied in the order of <n>.
+    */
+  var tyModelPatches: List[String] = Nil
+
   /** type model */
   lazy val tyModel: TyModel =
-    import esmeta.ty.util.JsonProtocol.given
-    TyModel.fromFile(s"$MANUALS_DIR/types")
+    val base = s"$MANUALS_DIR/types"
+    if (tyModelPatches.isEmpty) TyModel.fromFile(base)
+    else
+      val file = java.io.File.createTempFile("types", "")
+      file.deleteOnExit
+      executeCmd(s"cp $base $file")
+      for (patch <- tyModelPatches) executeCmd(s"patch -s $file $patch")
+      TyModel.fromFile(file.toString)
+
+  /** choose the type model patches for a version */
+  def selectTyModel(isDescendant: String => Boolean): Unit =
+    val pattern = "([0-9]+)-([0-9a-f]+)\\.diff".r
+    tyModelPatches = (for {
+      file <- getFiles(_.endsWith(".diff"))
+      if file.getParentFile.getName == "types-patch"
+      (n, commit) <- file.getName match
+        case pattern(n, commit) => Some((n.toInt, commit))
+        case _                  => None
+      if isDescendant(commit)
+    } yield n -> file.toString).sortBy(_._1).map(_._2)
 
   /** find all files in the manual directory with a filter */
   private def getFiles(filter: String => Boolean): List[File] = (for {

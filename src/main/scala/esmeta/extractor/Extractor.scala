@@ -26,6 +26,13 @@ object Extractor:
       case version =>
         // if bugfix patch exists, apply it to spec.html
         lazy val document = readFile(SPEC_HTML).toHtml
+        // choose the type model file for this version
+        ManualInfo.selectTyModel(commit =>
+          executeCmd(
+            s"git merge-base --is-ancestor $commit ${version.hash} && echo yes || true",
+            ECMA262_DIR,
+          ).trim == "yes",
+        )
         for {
           patchFile <- ManualInfo.bugfixPatchMap.get(version.hash)
         } {
