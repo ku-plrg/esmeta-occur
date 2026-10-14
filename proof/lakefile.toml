@@ -1,0 +1,16 @@
+name = "got"
+version = "0.1.0"
+defaultTargets = ["GOTProject"]
+
+[[lean_lib]]
+name = "GOTProject"
+roots = [
+  "GOT.Core",
+  "GOT.Analysis",
+  "GOT.Model",
+  "GOT.Soundness",
+  "GOT.PaperExamples",
+  "GOT.ECMA262Example",
+  "GOTSoundness",
+  "GOTTests"
+]

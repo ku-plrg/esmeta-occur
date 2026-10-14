@@ -1403,17 +1403,14 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       AbsValue(isymty, newGuard && iguard)
 
     /** keep an argument description only if it still denotes the argument value
-      * after the call; otherwise, fall back to its type, or top
+      * after the call; otherwise, fall back to its type weakened by the callee
+      * effect (weaken_delta in the paper)
       */
     private def stableArgument(value: AbsValue, effect: Effect)(using
       st: AbsState,
     ): AbsValue =
       if (value.symty.isStable(effect)) value
-      else
-        val snapshot = STy(value.ty)
-        value.copy(symty =
-          if (snapshot.isStable(effect)) snapshot else STy(ValueTy.Top),
-        )
+      else value.copy(symty = STy(effect(value.ty)))
 
     /** instantiation of type constraint */
     def instantiate(

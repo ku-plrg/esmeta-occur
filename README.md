@@ -79,6 +79,20 @@ python3 $ESMETA_HOME/scripts/provenance_heatmaps.py --cap-size 16 --cap-leaf 18
 
 The script needs `pandas`, `numpy`, `matplotlib`, and `seaborn`. It writes `heatmap-size-depth.pdf`, `heatmap-size-leaf.pdf`, and `heatmap-depth-leaf.pdf` into `logs/analyze`. The `--cap-*` options bin the tail of each axis into the last cell, as in the paper.
 
+## Mechanized Soundness Proof
+
+The soundness theorem of the paper (Theorem 4.1) is mechanized in Lean 4 in
+`proof/`. To check it:
+
+```sh
+cd proof
+lake build                      # checks every proof
+lake env lean CheckAxioms.lean  # the main theorems use only standard axioms
+```
+
+`proof/README.md` maps each definition and figure of the paper to the Lean code,
+and `tech-report.pdf` describes the definitions and the proof structure.
+
 ## Hardware Dependencies
 
 This tool does not require high-end hardware but benefits from:

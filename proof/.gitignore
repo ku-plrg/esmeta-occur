@@ -1,0 +1,13 @@
+/.lake/
+*.olean
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+*.xdv
+!docs/*.pdf
+!papers/*.pdf
