@@ -1,4 +1,4 @@
-# OOPSLA'27 - Towards Precise Type Analysis on JavaScript Language Specifications via Occurrence Typing
+# OOPSLA'27 - Precise Type Analysis on JavaScript Language Specifications via Generalized Occurrence Typing
 
 ## Introduction
 
@@ -13,25 +13,71 @@ This tool is an extension of **ESMeta**, the **E**CMAScript **S**pecification **
   - **Ours** (no extra flag): our full type guard implementation. It reduces the average number of false alarms from 193.1 (*Syn*) to 25.9, with an average of 38.5 alarms per version.
   - **Prov** (`-tycheck:provenance`): additionally records provenance information that shows how type guards are derived and applied.
 
-## Usage
+## Build
 
-Set `ESMETA_HOME` to this directory and build the tool:
+The build needs JDK 21, sbt, and the ECMA-262 sources. The ECMA-262 sources are a git submodule, which an anonymized archive of this repository does not include. Clone the full repository so that every version in `versions` can be checked out:
+
+```sh
+git clone https://github.com/tc39/ecma262 ecma262
+git -C ecma262 checkout 0b24a049c11fe0604b1c929772e7cbd671b78492   # ES2024, used by the tests
+```
+
+Then set `ESMETA_HOME` to this directory and build the tool:
 
 ```sh
 export ESMETA_HOME=$(pwd)
-git submodule update --init
+export PATH=$ESMETA_HOME/bin:$PATH
 sbt assembly
 ```
 
-Then run the type checker on one version of ECMA-262. The `-extract:target` option checks out the given commit of the `ecma262` submodule:
+`sbt test` runs the regression tests, including `TypeGuardSmallTest` for the type guard rules.
+
+## Running the Type Checker on One Version
+
+The `-extract:target` option checks out the given commit of the `ecma262` submodule, extracts the specification, and runs the analysis:
 
 ```sh
-bin/esmeta tycheck -tycheck:detail-log -extract:target=d502ea4
+esmeta tycheck -tycheck:detail-log -extract:target=d502ea4
 ```
 
-The analysis results are written to `logs/analyze`. The `errors` file lists the alarms, and the `summary` file gives one line of statistics.
+The results are written to `logs/analyze`:
 
-The scripts `benchmark.sh` and `benchmark-test.sh` run every setting above on the versions listed in `versions` (253 commits used in the paper) and `versions-test` (three commits, for a smoke test). The results are collected in `result/<setting>/summary.tsv`. The scripts in `scripts/` draw the provenance heatmaps from the `prov` setting.
+- `errors`: the list of alarms (type mismatches), one block per alarm.
+- `summary`: one line of statistics (iterations, duration, number of alarms, number of guards, and provenance statistics).
+- `guards`, `refined`, `types`: the inferred type guards, refined variables, and inferred types.
+
+On `d502ea4` (the first version in `versions`, right after ES2024), the full setting reports 64 alarms.
+
+## Reproducing the Evaluation
+
+### Alarms, precision, and performance (Figures 16 and 17, Table 2)
+
+`benchmark.sh` runs every setting on the 253 versions of ECMA-262 listed in `versions`:
+
+```sh
+./benchmark.sh
+```
+
+One setting on 253 versions takes from about 30 minutes (Syn, Inval) to 3 hours (Ours, Prov) on one machine. To run only some settings, comment out the other `doit` lines at the end of the script. `benchmark-test.sh` runs the same loop on the three versions in `versions-test` as a smoke test.
+
+The results are collected in `result/<setting>/summary.tsv`, one row per version, where `<setting>` is one of `base`, `syn`, `pre` (NoMut), `bool`, `inval`, `our`, and `prov`. The per-version logs are in `result/<setting>/<index>/`. The columns used in the paper are:
+
+- `# errors`: the number of alarms (Figure 16).
+- `iter` and `duration (ms)`: the number of iterations and the analysis time (Figure 17).
+
+The true positives (34 specification bugs in Table 2) were classified by hand. Precision in Figure 16 is the number of true positives divided by `# errors` for each version.
+
+### Provenance heatmaps (Figure 18)
+
+The heatmaps are drawn from the ES2025 version (`2e1eeda`) with provenance tracking:
+
+```sh
+esmeta tycheck -tycheck:detail-log -tycheck:provenance -extract:target=2e1eeda
+cd logs/analyze
+python3 $ESMETA_HOME/scripts/provenance_heatmaps.py --cap-size 16 --cap-leaf 18
+```
+
+The script needs `pandas`, `numpy`, `matplotlib`, and `seaborn`. It writes `heatmap-size-depth.pdf`, `heatmap-size-leaf.pdf`, and `heatmap-depth-leaf.pdf` into `logs/analyze`. The `--cap-*` options bin the tail of each axis into the last cell, as in the paper.
 
 ## Hardware Dependencies
 
