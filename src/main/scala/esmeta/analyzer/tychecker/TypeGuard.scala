@@ -49,7 +49,7 @@ trait TypeGuardDecl { self: TyChecker =>
     } yield dty -> newConstr)
 
     def filter(ty: ValueTy): TypeGuard =
-      TypeGuard(map.filter { (dty, _) => !(dty.ty && ty).isBottom })
+      TypeGuard(map.filter { (dty, _) => !DemandType.disjoint(dty.ty, ty) })
 
     def lift(ty: ValueTy = ValueTy.Top)(using st: AbsState): TypeGuard =
       this && TypeGuard((for {
@@ -69,15 +69,15 @@ trait TypeGuardDecl { self: TyChecker =>
     def ||(that: TypeGuard)(lty: ValueTy, rty: ValueTy): TypeGuard =
       val (ldtys, rdtys) = (this.dtys, that.dtys)
       val dtys =
-        ldtys.filter(k => (k.ty && rty).isBottom || rdtys.contains(k)) ++
-        rdtys.filter(k => (k.ty && lty).isBottom || ldtys.contains(k))
+        ldtys.filter(k => DemandType.disjoint(k.ty, rty) || rdtys.contains(k)) ++
+        rdtys.filter(k => DemandType.disjoint(k.ty, lty) || ldtys.contains(k))
+      lazy val ty = lty || rty
       TypeGuard((for {
         dty <- dtys.toList
-        ty = lty || rty
-        constr = (this.evaluate(ty, dty.ty), that.evaluate(ty, dty.ty)) match
-          case (l, r) if (lty && dty.ty).isBottom => r
-          case (l, r) if (rty && dty.ty).isBottom => l
-          case (l, r)                             => l || r
+        constr =
+          if (DemandType.disjoint(lty, dty.ty)) that.evaluate(ty, dty.ty)
+          else if (DemandType.disjoint(rty, dty.ty)) this.evaluate(ty, dty.ty)
+          else this.evaluate(ty, dty.ty) || that.evaluate(ty, dty.ty)
         if !constr.isTop
       } yield dty -> constr).toMap)
 
@@ -88,7 +88,7 @@ trait TypeGuardDecl { self: TyChecker =>
     } yield dty -> constr).toMap)
 
     def evaluate(lty: ValueTy, rty: ValueTy): TypeConstr =
-      if (lty && rty).isBottom then TypeConstr()
+      if DemandType.disjoint(lty, rty) then TypeConstr()
       else {
         val constrs = for {
           (dty, constr) <- map
@@ -153,8 +153,25 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def from(givenTy: ValueTy): Set[DemandType] =
       DemandType.set
-        .filter(ty => !(givenTy && ty).isBottom)
+        .filter(ty => !disjoint(givenTy, ty))
         .map(DemandType(_))
+
+    // whether `(l && r).isBottom`, cached when one side is a demand type;
+    // the operand order of the original meet is kept in separate caches
+    private val givenFirst =
+      scala.collection.mutable.HashMap.empty[ValueTy, Set[ValueTy]]
+    private val targetFirst =
+      scala.collection.mutable.HashMap.empty[ValueTy, Set[ValueTy]]
+    def disjoint(l: ValueTy, r: ValueTy): Boolean =
+      if (set.contains(r))
+        !givenFirst
+          .getOrElseUpdate(l, set.filter(t => !(l && t).isBottom))
+          .contains(r)
+      else if (set.contains(l))
+        !targetFirst
+          .getOrElseUpdate(r, set.filter(t => !(t && r).isBottom))
+          .contains(l)
+      else (l && r).isBottom
   }
 
   /** type constraints */
