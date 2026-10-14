@@ -68,11 +68,10 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def ||(that: TypeGuard)(lty: ValueTy, rty: ValueTy): TypeGuard =
       val (ldtys, rdtys) = (this.dtys, that.dtys)
+      import DemandType.disjoint
       val dtys =
-        ldtys.filter(k =>
-          DemandType.disjoint(k.ty, rty) || rdtys.contains(k),
-        ) ++
-        rdtys.filter(k => DemandType.disjoint(k.ty, lty) || ldtys.contains(k))
+        ldtys.filter(k => disjoint(k.ty, rty) || rdtys.contains(k)) ++
+        rdtys.filter(k => disjoint(k.ty, lty) || ldtys.contains(k))
       lazy val ty = lty || rty
       TypeGuard((for {
         dty <- dtys.toList
