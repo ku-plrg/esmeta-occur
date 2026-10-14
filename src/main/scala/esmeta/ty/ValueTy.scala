@@ -65,23 +65,23 @@ sealed trait ValueTy extends Ty with Lattice[ValueTy] {
     else ValueTy.opCache.leq(this, that)(leqBody(that))
 
   private def leqBody(that: ValueTy): Boolean =
-      this.clo <= that.clo &&
-      this.cont <= that.cont &&
-      this.record <= that.record &&
-      this.map <= that.map &&
-      this.list <= that.list &&
-      this.ast <= that.ast &&
-      this.grammarSymbol <= that.grammarSymbol &&
-      this.codeUnit <= that.codeUnit &&
-      this.enumv <= that.enumv &&
-      this.math <= that.math &&
-      this.infinity <= that.infinity &&
-      this.number <= that.number &&
-      this.bigInt <= that.bigInt &&
-      this.str <= that.str &&
-      this.bool <= that.bool &&
-      this.undef <= that.undef &&
-      this.nullv <= that.nullv
+    this.clo <= that.clo &&
+    this.cont <= that.cont &&
+    this.record <= that.record &&
+    this.map <= that.map &&
+    this.list <= that.list &&
+    this.ast <= that.ast &&
+    this.grammarSymbol <= that.grammarSymbol &&
+    this.codeUnit <= that.codeUnit &&
+    this.enumv <= that.enumv &&
+    this.math <= that.math &&
+    this.infinity <= that.infinity &&
+    this.number <= that.number &&
+    this.bigInt <= that.bigInt &&
+    this.str <= that.str &&
+    this.bool <= that.bool &&
+    this.undef <= that.undef &&
+    this.nullv <= that.nullv
 
   /** union type */
   def ||(that: => ValueTy): ValueTy =
@@ -93,25 +93,25 @@ sealed trait ValueTy extends Ty with Lattice[ValueTy] {
     else ValueTy.opCache.join(this, that)(joinBody(that))
 
   private def joinBody(that: ValueTy): ValueTy =
-      ValueTy(
-        this.clo || that.clo,
-        this.cont || that.cont,
-        this.record || that.record,
-        this.map || that.map,
-        this.list || that.list,
-        this.ast || that.ast,
-        this.grammarSymbol || that.grammarSymbol,
-        this.codeUnit || that.codeUnit,
-        this.enumv || that.enumv,
-        this.math || that.math,
-        this.infinity || that.infinity,
-        this.number || that.number,
-        this.bigInt || that.bigInt,
-        this.str || that.str,
-        this.bool || that.bool,
-        this.undef || that.undef,
-        this.nullv || that.nullv,
-      ).norm
+    ValueTy(
+      this.clo || that.clo,
+      this.cont || that.cont,
+      this.record || that.record,
+      this.map || that.map,
+      this.list || that.list,
+      this.ast || that.ast,
+      this.grammarSymbol || that.grammarSymbol,
+      this.codeUnit || that.codeUnit,
+      this.enumv || that.enumv,
+      this.math || that.math,
+      this.infinity || that.infinity,
+      this.number || that.number,
+      this.bigInt || that.bigInt,
+      this.str || that.str,
+      this.bool || that.bool,
+      this.undef || that.undef,
+      this.nullv || that.nullv,
+    ).norm
 
   /** intersection type */
   def &&(that: => ValueTy): ValueTy =
@@ -123,25 +123,25 @@ sealed trait ValueTy extends Ty with Lattice[ValueTy] {
     else ValueTy.opCache.meet(this, that)(meetBody(that))
 
   private def meetBody(that: ValueTy): ValueTy =
-      ValueTy(
-        this.clo && that.clo,
-        this.cont && that.cont,
-        this.record && that.record,
-        this.map && that.map,
-        this.list && that.list,
-        this.ast && that.ast,
-        this.grammarSymbol && that.grammarSymbol,
-        this.codeUnit && that.codeUnit,
-        this.enumv && that.enumv,
-        this.math && that.math,
-        this.infinity && that.infinity,
-        this.number && that.number,
-        this.bigInt && that.bigInt,
-        this.str && that.str,
-        this.bool && that.bool,
-        this.undef && that.undef,
-        this.nullv && that.nullv,
-      )
+    ValueTy(
+      this.clo && that.clo,
+      this.cont && that.cont,
+      this.record && that.record,
+      this.map && that.map,
+      this.list && that.list,
+      this.ast && that.ast,
+      this.grammarSymbol && that.grammarSymbol,
+      this.codeUnit && that.codeUnit,
+      this.enumv && that.enumv,
+      this.math && that.math,
+      this.infinity && that.infinity,
+      this.number && that.number,
+      this.bigInt && that.bigInt,
+      this.str && that.str,
+      this.bool && that.bool,
+      this.undef && that.undef,
+      this.nullv && that.nullv,
+    )
 
   /** prune type */
   def --(that: => ValueTy): ValueTy =
