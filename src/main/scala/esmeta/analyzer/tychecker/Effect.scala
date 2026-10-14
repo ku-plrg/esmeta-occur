@@ -57,13 +57,13 @@ trait EffectDecl { self: TyChecker =>
 
     /** effect of writing a field of an object described by `baseTy` */
     def fieldUpdate(fld: String, baseTy: ValueTy)(using AbsState): Effect =
-      this ⊔ Effect({
-        baseTy.record.bases match
-          case Inf => Map()
-          case Fin(set) =>
-            val baseTys = set.map(ManualInfo.tyModel.baseOf(_))
-            baseTys.map { baseTy => baseTy -> Set(fld) }.toMap
-      })
+      this ⊔ Effect(basesOf(baseTy).map(_ -> Set(fld)).toMap)
+
+    /** base types of an object (every base type if unknown) */
+    private def basesOf(baseTy: ValueTy): Set[String] =
+      baseTy.record.bases match
+        case Inf      => allBases
+        case Fin(set) => set.map(ManualInfo.tyModel.baseOf(_))
 
     def nonEmpty: Boolean = map.nonEmpty
 
@@ -104,6 +104,10 @@ trait EffectDecl { self: TyChecker =>
 
     /** any field of any object may be written */
     lazy val Invalidate: Effect = Effect(invalidate = true)
+
+    /** all base types */
+    lazy val allBases: Set[String] =
+      ManualInfo.tyModel.declMap.keySet.map(ManualInfo.tyModel.baseOf(_))
 
     /** appender */
     private given Rule[Set[String]] = iterableRule("(", ", ", ")")
