@@ -360,8 +360,8 @@ trait TypeGuardDecl { self: TyChecker =>
         if (ts.isEmpty) None
         else if (ts.forall(_ == ts.head)) Some(ts.head)
         else None
-      case RefinePoint(_, child, _, _, _, _) => child.truthOpt
-      case Provenance.Bot | Provenance.Top   => None
+      case RefinePoint(_, child, _, _, _, _)                => child.truthOpt
+      case Placeholder(_) | Provenance.Bot | Provenance.Top => None
 
     // simple explanation is bigger (imprecise)
     def <=(that: Provenance): Boolean = {
@@ -670,7 +670,7 @@ trait TypeGuardDecl { self: TyChecker =>
       case RefinePoint(target, child, _, _, _, _) =>
         val f = target.func
         f.name == fname || f.irFunc.name == fname || involvesFunc(child, fname)
-      case Bot | Top => false
+      case Placeholder(_) | Bot | Top => false
 
     // Mask provenance tree with a placeholder if it involves an exception function
     private val ExceptionFuncs: Set[String] = Set("GetFunctionRealm")
@@ -760,8 +760,9 @@ trait TypeGuardDecl { self: TyChecker =>
         case Meet(child)               => norm(s"meet${child.hashCode()}")
         case RefinePoint(target, _, _, _, _, _) =>
           norm(s"refine${target.node.id}")
-        case Provenance.Bot => ???
-        case Provenance.Top => ???
+        case Placeholder(name) => norm(s"placeholder$name")
+        case Provenance.Bot    => ???
+        case Provenance.Top    => ???
 
     /** Colors */
     val NODE_COLOR = """"black""""
@@ -830,6 +831,7 @@ trait TypeGuardDecl { self: TyChecker =>
           )
           drawNaming(getId(p), NODE_COLOR, target.node.name)
           drawEdge(getId(p), getId(child), EDGE_COLOR, Some(p.ty.toString))
+        case Placeholder(_) => ()
         case Provenance.Bot => ()
         case Provenance.Top => ()
 
@@ -904,7 +906,7 @@ trait TypeGuardDecl { self: TyChecker =>
       case Meet(children) =>
         val seqs = children.toList.flatMap(stepSeqOf)
         if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
-      case Provenance.Bot | Provenance.Top => None
+      case Placeholder(_) | Provenance.Bot | Provenance.Top => None
     private def stepsCode(steps: List[Int]): BigInt =
       steps.foldLeft(BigInt(0))((acc, s) => acc * 1000 + BigInt(s))
     private def stepRankOf(prov: Provenance): BigInt =
