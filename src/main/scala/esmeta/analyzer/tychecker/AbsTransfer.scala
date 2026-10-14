@@ -171,7 +171,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       fromCp.copy(node = to)
 
     /** transfer function for return points */
-    def apply(rp: ReturnPoint): Unit = if (!canUseReturnTy(rp.func)) {
+    def apply(rp: ReturnPoint): Unit = if (!skipReturn(rp.func)) {
       val AbsRet(value, effect) = callResult(rp)
       for {
         callerNps <- retEdges.get(rp)
@@ -184,7 +184,9 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         val weakenedSt = callerSt.kill(effect)
         val newV = {
           given AbsState = weakenedSt
-          instantiate(value, callerNp, effect) ⊓ AbsValue(retTy)
+          if (canUseReturnTy(rp.func))
+            typedReturnValue(rp.func, callerNp, effect)
+          else instantiate(value, callerNp, effect) ⊓ AbsValue(retTy)
         }
         val nextSt = weakenedSt.update(callerNp.node.lhs, newV, refine = false)
         analyzer += nextNp -> nextSt
@@ -278,7 +280,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       given AbsState = callerSt
       callInfo += callerNp -> callerSt
       analyzer.argsInfo += callerNp -> vs
-      if (canUseReturnTy(callee)) {
+      if (canUseReturnTy(callee) && !useTypedEffect) {
         val call = callerNp.node
         val retTy = callee.retTy.ty.toValue
         // a typed callee has no analyzed effect, but an invalidating call still
@@ -418,7 +420,7 @@ trait AbsTransferDecl { analyzer: TyChecker =>
 
     /** propagate callee analysis result */
     def propagate(rp: ReturnPoint, callerNp: NodePoint[Call]): Unit = {
-      if (!canUseReturnTy(rp.func)) {
+      if (!skipReturn(rp.func)) {
         val AbsRet(value, effect) = callResult(rp)
         (for {
           nextNp <- getAfterCallNp(callerNp)
@@ -428,7 +430,9 @@ trait AbsTransferDecl { analyzer: TyChecker =>
           weakenedSt = callerSt.kill(effect)
           newV = {
             given AbsState = weakenedSt
-            instantiate(value, callerNp, effect) ⊓ AbsValue(retTy)
+            if (canUseReturnTy(rp.func))
+              typedReturnValue(rp.func, callerNp, effect)
+            else instantiate(value, callerNp, effect) ⊓ AbsValue(retTy)
           }
           if !newV.isBottom
         } yield analyzer += nextNp -> weakenedSt.define(
@@ -1847,6 +1851,29 @@ trait AbsTransferDecl { analyzer: TyChecker =>
       )
       _ <- notice(v, refinedV)
     } yield ()
+
+    /** whether the return point of a callee is not propagated to its callers
+      * because its callers already use its declared return type
+      */
+    private def skipReturn(func: Func): Boolean =
+      canUseReturnTy(func) && !useTypedEffect
+
+    /** the return value of a callee with a declared return type, used after
+      * applying the callee effect to the caller state (the same value as the
+      * one used at the call site when typed effects are not applied)
+      */
+    private def typedReturnValue(
+      callee: Func,
+      callerNp: NodePoint[Call],
+      effect: Effect,
+    )(using st: AbsState): AbsValue =
+      val retTy = callee.retTy.ty.toValue
+      val vs = analyzer.argsInfo.getOrElse(callerNp, Nil)
+      val v = manualRefiners.get(callee.name) match
+        case Some(refiner) =>
+          instantiate(refiner(callee, vs, retTy, st), callerNp, effect)
+        case None => AbsValue(retTy).lift
+      v.killMutable(using callerNp)
 
     /** check if the return type can be used */
     private lazy val canUseReturnTy: Func => Boolean = cached { func =>
