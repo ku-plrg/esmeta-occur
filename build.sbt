@@ -122,17 +122,6 @@ lazy val esParseTest =
 lazy val esAnalyzeTest =
   taskKey[Unit]("Launch analyze tests for ECMAScript (small)")
 
-// injector
-lazy val injectorTest = taskKey[Unit]("Launch injector tests")
-lazy val injectorStringifyTest =
-  taskKey[Unit]("Launch stringify tests for injector (tiny)")
-
-// test262
-lazy val test262ParseTest =
-  taskKey[Unit]("Launch parse tests for Test262 (large)")
-lazy val test262EvalTest =
-  taskKey[Unit]("Launch eval tests for Test262 (large)")
-
 // Java options for assembly
 lazy val assemblyJavaOpts = Seq(
   "-Xms4g",
@@ -150,8 +139,6 @@ ThisBuild / assemblyPrependShellScript := Some(
 
 // library versions
 val CirceVersion = "0.14.10"
-val AkkaVersion = "2.8.8"
-val AkkaHttpVersion = "10.5.3"
 
 // project root
 lazy val root = project
@@ -173,9 +160,6 @@ lazy val root = project
         .cross(CrossVersion.for3Use2_13),
       ("org.scala-lang.modules" %% "scala-parallel-collections" % "1.2.0")
         .cross(CrossVersion.for3Use2_13),
-      "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
-      "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
-      "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
     ),
 
     // Copy all managed dependencies to <build-root>/lib_managed/ This is
@@ -284,14 +268,6 @@ lazy val root = project
     esEvalTest := (Test / testOnly).toTask(" *.es.Eval*Test").value,
     esParseTest := (Test / testOnly).toTask(" *.es.Parse*Test").value,
     esAnalyzeTest := (Test / testOnly).toTask(" *.es.Analyze*Test").value,
-    // ir
-    injectorTest := (Test / testOnly).toTask(" *.injector.*Test").value,
-    injectorStringifyTest := (Test / testOnly)
-      .toTask(" *.injector.Stringify*Test")
-      .value,
-    // test262
-    test262ParseTest := (Test / testOnly).toTask(" *.test262.Parse*Test").value,
-    test262EvalTest := (Test / testOnly).toTask(" *.test262.Eval*Test").value,
   )
 
 // create the `.completion` file for autocompletion in shell

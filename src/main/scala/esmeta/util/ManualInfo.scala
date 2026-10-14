@@ -3,7 +3,6 @@ package esmeta.util
 import esmeta.MANUALS_DIR
 import esmeta.analyzer.tychecker.TyChecker.Ignore
 import esmeta.spec.Spec
-import esmeta.test262.util.ManualConfig
 import esmeta.ty.TyModel
 import esmeta.util.BaseUtils.*
 import esmeta.util.SystemUtils.*
@@ -40,13 +39,6 @@ object ManualInfo {
   lazy val tyModel: TyModel =
     import esmeta.ty.util.JsonProtocol.given
     TyModel.fromFile(s"$MANUALS_DIR/types")
-
-  /** get test262 manual configuration */
-  lazy val test262Config: ManualConfig = ManualConfig(
-    readJson[Map[String, List[String]]](s"$MANUALS_DIR/test262/filtered.json"),
-    readJson[List[String]](s"$MANUALS_DIR/test262/yet-categorized.json"),
-    readJson[List[String]](s"$MANUALS_DIR/test262/supported-features.json"),
-  )
 
   /** find all files in the manual directory with a filter */
   private def getFiles(filter: String => Boolean): List[File] = (for {

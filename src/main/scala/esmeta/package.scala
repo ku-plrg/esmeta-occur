@@ -17,12 +17,7 @@ val EXTRACT_LOG_DIR = s"$LOG_DIR/extract"
 val COMPILE_LOG_DIR = s"$LOG_DIR/compile"
 val CFG_LOG_DIR = s"$LOG_DIR/cfg"
 val ANALYZE_LOG_DIR = s"$LOG_DIR/analyze"
-val INJECT_LOG_DIR = s"$LOG_DIR/inject"
 val EVAL_LOG_DIR = s"$LOG_DIR/eval"
-val FUZZ_LOG_DIR = s"$LOG_DIR/fuzz"
-val TEST262TEST_LOG_DIR = s"$LOG_DIR/test262"
-val DUMP_DEBUGGER_LOG_DIR = s"$LOG_DIR/dump/debugger"
-val DUMP_VISUALIZER_LOG_DIR = s"$LOG_DIR/dump/visualizer"
 
 /** stack trace depth */
 val STACK_TRACE_DEPTH = 15
@@ -58,10 +53,6 @@ var ERROR_MODE = false
 
 /** exit status return mode */
 var STATUS_MODE = false
-
-/** test262 directories */
-var TEST262_DIR = s"$TEST_DIR/test262"
-def TEST262_TEST_DIR = s"$TEST262_DIR/test"
 
 // -----------------------------------------------------------------------------
 // Mutable Global Options

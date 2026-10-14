@@ -72,15 +72,6 @@ object ESMeta extends Git(BASE_DIR) {
     // Interpreter & Double Debugger for ECMAScript
     CmdParse,
     CmdEval,
-    CmdWeb,
-    // Tester for Test262 (ECMAScript Test Suite)
-    CmdTest262Test,
-    // ECMAScript Fuzzer
-    CmdFuzz,
-    CmdInject,
-    CmdMutate,
-    CmdDumpDebugger,
-    CmdDumpVisualizer,
   )
   val cmdMap = commands.foldLeft[Map[String, Command[?]]](Map()) {
     case (map, cmd) => map + (cmd.name -> cmd)
@@ -98,15 +89,6 @@ object ESMeta extends Git(BASE_DIR) {
     // Interpreter & Double Debugger for ECMAScript
     Parse,
     Eval,
-    Web,
-    // Tester for Test262 (ECMAScript Test Suite)
-    Test262Test,
-    // ECMAScript Fuzzer
-    Fuzz,
-    Inject,
-    Mutate,
-    DumpDebugger,
-    DumpVisualizer,
   )
 
   /** command options */
@@ -115,11 +97,6 @@ object ESMeta extends Git(BASE_DIR) {
     ("error", BoolOption((_, b) => ERROR_MODE = b), "show error stack traces."),
     ("status", BoolOption((_, b) => STATUS_MODE = b), "exit with status."),
     ("time", BoolOption(_.time = _), "display the duration time."),
-    (
-      "test262dir",
-      StrOption((c, s) => TEST262_DIR = s),
-      "set the directory of Test262 (default: $ESMETA_HOME/tests/test262).",
-    ),
   )
 }
 
