@@ -104,6 +104,10 @@ lake env lean CheckAxioms.lean  # the main theorems use only standard axioms
 `proof/README.md` maps each definition and figure of the paper to the Lean code,
 and `tech-report.pdf` describes the definitions and the proof structure.
 
+## Example Programs for Other Type Checkers
+
+`examples/` contains the programs that mimic the examples of Section 2 in Typed Racket, Flow, and MLsem, with the checker versions and the results. See `examples/README.md`.
+
 ## Hardware Dependencies
 
 This tool does not require high-end hardware but benefits from:
