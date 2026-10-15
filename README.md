@@ -69,7 +69,7 @@ The results are collected in `result/<setting>/summary.tsv`, one row per version
 
 ### From the raw results to the numbers and figures
 
-`eval/result/<setting>/summary.tsv` holds the results of our run of `benchmark.sh` (seven settings, 253 versions). `eval/tp.tsv` gives the number of true positives per version: the 34 specification bugs in Table 2 were classified by hand, and a version counts a bug until the version that fixes it. The scripts in `eval/` need `pandas` and `matplotlib`:
+`eval/result/<setting>/summary.tsv` holds the results of our run of `benchmark.sh` (seven settings, 253 versions). `eval/tp.tsv` gives the number of true positives per version: the 34 specification bugs in Table 1 were classified by hand, and a version counts a bug until the version that fixes it. The scripts in `eval/` need `pandas` and `matplotlib`:
 
 ```sh
 cd eval
