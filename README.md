@@ -94,7 +94,7 @@ The script needs `pandas`, `numpy`, and `matplotlib`. The tables that the paper 
 
 ## Mechanized Soundness Proof
 
-The soundness theorem of the paper (Theorem 4.1) is mechanized in Lean 4 in
+The soundness theorem of the paper (Theorem 3.1) is mechanized in Lean 4 in
 `proof/`. To check it:
 
 ```sh
