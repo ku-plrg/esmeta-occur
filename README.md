@@ -13,6 +13,8 @@ This tool is an extension of **ESMeta**, the **E**CMAScript **S**pecification **
   - **Ours** (no extra flag): our full type guard implementation. It reduces the average number of false alarms from 193.1 (*Syn*) to 25.9, with an average of 38.5 alarms per version.
   - **Prov** (`-tycheck:provenance`): additionally records provenance information that shows how type guards are derived and applied.
 
+In every setting, the write effect of a callee is applied at its call sites even when the caller uses the declared return type of the callee (`-tycheck:typed-effect`, on by default). Turning it off (`-tycheck:typed-effect=false`) reproduces the behavior of the earlier implementation, which did not apply these effects.
+
 ## Build
 
 The build needs JDK 21, sbt, and the ECMA-262 sources. The ECMA-262 sources are a git submodule, which an anonymized archive of this repository does not include. Clone the full repository so that every version in `versions` can be checked out:
