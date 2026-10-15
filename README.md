@@ -7,10 +7,10 @@ This tool is an extension of **ESMeta**, the **E**CMAScript **S**pecification **
 * Previously, ESMeta only performed syntactic refinement, which led to many false alarms due to insufficient information propagation. Occurrence typing was proposed to address this issue but struggled with mutation and non-boolean return types. Our work introduces a new technique using type guards. The evaluation in the paper compares the following settings over 253 versions of ECMA-262:
   - **Base** (`-tycheck:no-refine`): baseline with no refinements.
   - **Syn** (`-tycheck:infer-guard=false`): original ESMeta using only syntactic refinement.
-  - **NoMut** (`-tycheck:syntactic-kill`): emulates *Occurrence Typing Modulo Theories (Kent et al., PLDI 2016)* by skipping refinement on potentially mutated variables.
-  - **Ours_Bool** (`-tycheck:use-boolean-guard`): restricts demanded types to true and false, illustrating the necessity of generalized demanded types.
-  - **Inval** (`-tycheck:invalidate-call`): drops every field proposition at each call, as in Flow's invalidation.
-  - **Ours** (no extra flag): our full type guard implementation. It reduces the average number of false alarms from 193.1 (*Syn*) to 25.9, with an average of 38.5 alarms per version.
+  - **Ours_NoMut** (`-tycheck:syntactic-kill`): emulates *Occurrence Typing Modulo Theories (Kent et al., PLDI 2016)* by skipping refinement on potentially mutated variables.
+  - **Ours_Bool** (`-tycheck:use-boolean-guard`): restricts target types to true and false, illustrating the necessity of generalized target types.
+  - **Ours_Inval** (`-tycheck:invalidate-call`): drops every field proposition at each call, as in Flow's invalidation.
+  - **Ours** (no extra flag): our full type guard implementation. It reduces the average number of false alarms from 191.6 (*Syn*) to 25.3, with an average of 37.9 alarms per version.
   - **Prov** (`-tycheck:provenance`): additionally records provenance information that shows how type guards are derived and applied.
 
 In every setting, the write effect of a callee is applied at its call sites even when the caller uses the declared return type of the callee (`-tycheck:typed-effect`, on by default). Turning it off (`-tycheck:typed-effect=false`) reproduces the behavior of the earlier implementation, which did not apply these effects.
@@ -60,12 +60,12 @@ On `d502ea4` (the first version in `versions`, right after ES2024), the full set
 ./benchmark.sh
 ```
 
-One setting on 253 versions takes from about 30 minutes (Syn, Inval) to 3 hours (Ours, Prov) on one machine. To run only some settings, comment out the other `doit` lines at the end of the script. `benchmark-test.sh` runs the same loop on the three versions in `versions-test` as a smoke test.
+One setting on 253 versions takes from about 30 minutes (Syn, Ours_Inval) to 3 hours (Ours, Prov) on one machine. To run only some settings, comment out the other `doit` lines at the end of the script. `benchmark-test.sh` runs the same loop on the three versions in `versions-test` as a smoke test.
 
-The results are collected in `result/<setting>/summary.tsv`, one row per version, where `<setting>` is one of `base`, `syn`, `pre` (NoMut), `bool`, `inval`, `our`, and `prov`. The per-version logs are in `result/<setting>/<index>/`. The columns used in the paper are:
+The results are collected in `result/<setting>/summary.tsv`, one row per version, where `<setting>` is one of `base`, `syn`, `pre` (Ours_NoMut), `bool`, `inval`, `our`, and `prov`. The per-version logs are in `result/<setting>/<index>/`. The columns used in the paper are:
 
-- `# errors`: the number of alarms (Figure 16).
-- `iter` and `duration (ms)`: the number of iterations and the analysis time (Figure 17).
+- `# errors`: the number of alarms (Figure 11).
+- `iter` and `duration (ms)`: the number of iterations and the analysis time (Figure 12).
 
 ### From the raw results to the numbers and figures
 
@@ -74,13 +74,13 @@ The results are collected in `result/<setting>/summary.tsv`, one row per version
 ```sh
 cd eval
 python3 summarize.py    # average alarms, FP, precision, FP reduction, iteration and time ratios
-python3 draw_alarm.py   # Figure 16: fig/alarm/*.pdf and fig/prec.pdf
-python3 draw_perf.py    # Figure 17: fig/perf/iter.pdf and fig/perf/time.pdf
+python3 draw_alarm.py   # Figure 11: fig/alarm/*.pdf and fig/prec.pdf
+python3 draw_perf.py    # Figure 12: fig/perf/iter.pdf and fig/perf/time.pdf
 ```
 
 Precision is the average over versions of `TP / # errors`. To regenerate the figures from your own run, copy `result/<setting>/summary.tsv` of `benchmark.sh` into `eval/result/<setting>/` and run the scripts again.
 
-### Provenance heatmaps (Figure 18)
+### Provenance heatmaps (Figure 13)
 
 The heatmaps are drawn from the ES2025 version (`2e1eeda`) with provenance tracking:
 
@@ -90,7 +90,7 @@ cd logs/analyze
 python3 $ESMETA_HOME/scripts/provenance_heatmaps.py --cap-size 16 --cap-leaf 18
 ```
 
-The script needs `pandas`, `numpy`, `matplotlib`, and `seaborn`. It writes `heatmap-size-depth.pdf`, `heatmap-size-leaf.pdf`, and `heatmap-depth-leaf.pdf` into `logs/analyze`. The `--cap-*` options bin the tail of each axis into the last cell, as in the paper.
+The script needs `pandas`, `numpy`, and `matplotlib`. The tables that the paper used are in `eval/heatmap/`, so running the script there redraws Figure 13 without rerunning the analysis. It writes `heatmap-size-depth.pdf`, `heatmap-size-leaf.pdf`, and `heatmap-depth-leaf.pdf` into `logs/analyze`. The `--cap-*` options bin the tail of each axis into the last cell, as in the paper.
 
 ## Mechanized Soundness Proof
 

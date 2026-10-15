@@ -23,9 +23,9 @@ class TypeGuardSmallTest extends AnalyzerTest {
   private val func = checker.cfg.fnameMap("IsArray")
   private given NodePoint[Node] = NodePoint(func, func.entry, emptyView)
 
-  private val arrayConstr = TypeConstr((y: Base) -> (ArrayT, Provenance.Bot))
+  private val arrayConstr = TypeProp((y: Base) -> (ArrayT, Provenance.Bot))
   private val completionGuard = TypeGuard(
-    DemandType(NormalT(TrueT)) -> arrayConstr,
+    TargetType(NormalT(TrueT)) -> arrayConstr,
   )
   private val objectTy = RecordT(
     "",
@@ -96,7 +96,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
         heap(addr, key)
       case SymTy.SSym(sym) => fail(s"Unexpected caller symbol: $sym")
 
-    def checkConstr(constr: TypeConstr): Unit =
+    def checkConstr(constr: TypeProp): Unit =
       assert(constr.sexpr.isEmpty)
       constr.map.foreach {
         case (local: Local, (ty, _)) =>
@@ -138,7 +138,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
         v -> Bool(true),
       )
       checkCovered(stored, values, heap)
-      assert(field.guard(DemandType(TrueT)).isTop)
+      assert(field.guard(TargetType(TrueT)).isTop)
       val after = assume(stored, v, TrueT)
       assert(!(after.get(y).ty(using after) <= ArrayT))
       checkCovered(after, values, heap)
@@ -164,7 +164,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
 
     check("field lookup (single-field target)") {
       // A true field implies Array; a false field provides no refinement.
-      val target = new DemandType(RecordT("", Map("f" -> TrueT)))
+      val target = new TargetType(RecordT("", Map("f" -> TrueT)))
       val before = AbsState.Empty.copy(locals =
         Map(
           r -> AbsValue(
@@ -176,8 +176,8 @@ class TypeGuardSmallTest extends AnalyzerTest {
       )
       val (field, _) = checker.transfer.transfer(Field(r, EStr("f")))(before)
       val stored = before.define(v, field)
-      assert(field.guard(DemandType(TrueT)).map(y)._1 == ArrayT)
-      assert(field.guard(DemandType(FalseT)).isTop)
+      assert(field.guard(TargetType(TrueT)).map(y)._1 == ArrayT)
+      assert(field.guard(TargetType(FalseT)).isTop)
       for (result <- List(true, false)) {
         val heap = Heap(
           MMap(
@@ -209,7 +209,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
       val callee = AbsValue(
         SymTy.STy(BoolT),
         TypeGuard(
-          DemandType(TrueT) -> TypeConstr(
+          TargetType(TrueT) -> TypeProp(
             (0: Sym) -> (NumberT, Provenance.Bot),
           ),
         ),
@@ -222,7 +222,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
         effect,
       )(using before)
       heap.update(NamedAddr("x"), Str("f"), Str("abc"))
-      val stored = before.kill(effect).define(r, returned)
+      val stored = before.weaken(effect).define(r, returned)
       val values = Map[Local, Value](x -> NamedAddr("x"), r -> result)
       checkCovered(stored, values, heap)
       val after = assume(stored, r, TrueT)
@@ -243,7 +243,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
         effect,
       )(using before)
       heap.update(NamedAddr("x"), Str("f"), Str("abc"))
-      val after = before.kill(effect).define(r, returned)
+      val after = before.weaken(effect).define(r, returned)
       assert(!returned.symty.isInstanceOf[SymTy.SField])
       assert(saved != heap(NamedAddr("x"), Str("f")))
       checkCovered(after, Map(x -> NamedAddr("x"), r -> saved), heap)
@@ -262,7 +262,7 @@ class TypeGuardSmallTest extends AnalyzerTest {
         effect,
       )(using before)
       heap.update(NamedAddr("x"), Str("g"), Str("abc"))
-      val stored = before.kill(effect).define(r, returned)
+      val stored = before.weaken(effect).define(r, returned)
       assert(returned.symty == argument)
       val values = Map[Local, Value](x -> NamedAddr("x"), r -> saved)
       checkCovered(stored, values, heap)

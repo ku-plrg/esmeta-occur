@@ -101,22 +101,22 @@ trait SymTyDecl { self: TyChecker =>
 
       effect.isBottom || stable(this)
 
-    def kill(bases: Set[Base], update: Boolean): Option[SymTy] = this match
-      case t: SymRef      => killRef(t, bases, update)
+    def weaken(bases: Set[Base], update: Boolean): Option[SymTy] = this match
+      case t: SymRef      => weakenRef(t, bases, update)
       case STy(ty)        => Some(STy(ty))
-      case SNormal(symty) => symty.kill(bases, update).map(SNormal(_))
+      case SNormal(symty) => symty.weaken(bases, update).map(SNormal(_))
 
-    def kill(effect: Effect)(using st: AbsState): SymTy =
+    def weaken(effect: Effect)(using st: AbsState): SymTy =
       this match
         case STy(ty)   => STy(effect(ty))
-        case SVar(x)   => SVar(x) // killed by abstract environment
-        case SSym(sym) => SSym(sym) // killed by symbolic environment
+        case SVar(x)   => SVar(x) // weakened by abstract environment
+        case SSym(sym) => SSym(sym) // weakened by symbolic environment
         case field: SField =>
           if (field.isStable(effect)) field
           else STy(effect(field.ty)) // weaken the type of the old value
-        case SNormal(symty) => SNormal(symty.kill(effect)) // sound by spec
+        case SNormal(symty) => SNormal(symty.weaken(effect)) // sound by spec
 
-    def killRef(
+    def weakenRef(
       ref: SymRef,
       bases: Set[Base],
       update: Boolean,
@@ -125,8 +125,8 @@ trait SymTyDecl { self: TyChecker =>
       case SSym(sym) => if (bases contains sym) None else Some(SSym(sym))
       case SField(b, f) =>
         for {
-          b <- killRef(b, bases, update)
-          f <- f.kill(bases, update)
+          b <- weakenRef(b, bases, update)
+          f <- f.weaken(bases, update)
         } yield SField(b, f)
 
     def isSymbolic: Boolean = this match

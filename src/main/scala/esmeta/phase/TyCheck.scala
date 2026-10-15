@@ -98,7 +98,7 @@ case object TyCheck extends Phase[CFG, Unit] {
     (
       "syntactic-kill",
       BoolOption(_.useSyntacticKill = _),
-      "use syntactic kill for type checking(as Kent's work).",
+      "never refine mutable variables and fields (as Kent et al.).",
     ),
     (
       "invalidate-call",

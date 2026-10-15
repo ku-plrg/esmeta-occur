@@ -12,51 +12,51 @@ import esmeta.util.SystemUtils.exists
 trait TypeGuardDecl { self: TyChecker =>
 
   /** type guard */
-  case class TypeGuard(map: Map[DemandType, TypeConstr] = Map()) {
+  case class TypeGuard(map: Map[TargetType, TypeProp] = Map()) {
     def isEmpty: Boolean = map.isEmpty
     def nonEmpty: Boolean = !isEmpty
-    def dtys: Set[DemandType] = map.keySet
-    def get(dty: DemandType): Option[TypeConstr] = map.get(dty)
+    def dtys: Set[TargetType] = map.keySet
+    def get(dty: TargetType): Option[TypeProp] = map.get(dty)
 
-    def apply(dty: DemandType): TypeConstr =
-      map.getOrElse(dty, TypeConstr())
+    def apply(dty: TargetType): TypeProp =
+      map.getOrElse(dty, TypeProp())
 
     def bases: Set[Base] = map.values.flatMap(_.bases).toSet
 
-    def kill(bases: Set[Base])(using AbsState): TypeGuard = TypeGuard(for {
-      (dty, constr) <- map
-      newConstr = constr.kill(bases)
-      if newConstr.nonTop
-    } yield dty -> newConstr)
+    def weaken(bases: Set[Base])(using AbsState): TypeGuard = TypeGuard(for {
+      (dty, prop) <- map
+      newProp = prop.weaken(bases)
+      if newProp.nonTop
+    } yield dty -> newProp)
 
     /** transport a guard across heap changes described by `effect` */
-    def kill(effect: Effect)(using AbsState): TypeGuard =
+    def weaken(effect: Effect)(using AbsState): TypeGuard =
       if (effect.isBottom) this
       else
         TypeGuard(for {
-          (dty, constr) <- map
-          // a changed demand type could admit values the old guard did not
+          (dty, prop) <- map
+          // a changed target type could admit values the old guard did not
           // cover, so drop entries whose membership is not stable
           if SymTy.STy(dty.ty).isStable(effect)
-          newConstr = constr.kill(effect)
-          if newConstr.nonTop
-        } yield dty -> newConstr)
+          newProp = prop.weaken(effect)
+          if newProp.nonTop
+        } yield dty -> newProp)
 
-    def forReturn(symEnv: Map[Sym, ValueTy]): TypeGuard = TypeGuard(for {
-      (dty, constr) <- map
-      newConstr = constr.forReturn(symEnv)
-      if newConstr.nonTop
-    } yield dty -> newConstr)
+    def instantiate(symEnv: Map[Sym, ValueTy]): TypeGuard = TypeGuard(for {
+      (dty, prop) <- map
+      newProp = prop.instantiate(symEnv)
+      if newProp.nonTop
+    } yield dty -> newProp)
 
     def filter(ty: ValueTy): TypeGuard =
-      TypeGuard(map.filter { (dty, _) => !DemandType.disjoint(dty.ty, ty) })
+      TypeGuard(map.filter { (dty, _) => !TargetType.disjoint(dty.ty, ty) })
 
     def lift(ty: ValueTy = ValueTy.Top)(using st: AbsState): TypeGuard =
       this && TypeGuard((for {
-        kind <- DemandType.from(ty).toList
-        constr = TypeConstr().lift
-        if constr.nonTop
-      } yield kind -> constr).toMap)
+        kind <- TargetType.from(ty).toList
+        prop = TypeProp().lift
+        if prop.nonTop
+      } yield kind -> prop).toMap)
 
     def has(x: Base): Boolean = map.values.exists(_.has(x))
 
@@ -68,41 +68,41 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def ||(that: TypeGuard)(lty: ValueTy, rty: ValueTy): TypeGuard =
       val (ldtys, rdtys) = (this.dtys, that.dtys)
-      import DemandType.disjoint
+      import TargetType.disjoint
       val dtys =
         ldtys.filter(k => disjoint(k.ty, rty) || rdtys.contains(k)) ++
         rdtys.filter(k => disjoint(k.ty, lty) || ldtys.contains(k))
       lazy val ty = lty || rty
       TypeGuard((for {
         dty <- dtys.toList
-        constr =
-          if (DemandType.disjoint(lty, dty.ty)) that.evaluate(ty, dty.ty)
-          else if (DemandType.disjoint(rty, dty.ty)) this.evaluate(ty, dty.ty)
+        prop =
+          if (TargetType.disjoint(lty, dty.ty)) that.evaluate(ty, dty.ty)
+          else if (TargetType.disjoint(rty, dty.ty)) this.evaluate(ty, dty.ty)
           else this.evaluate(ty, dty.ty) || that.evaluate(ty, dty.ty)
-        if !constr.isTop
-      } yield dty -> constr).toMap)
+        if !prop.isTop
+      } yield dty -> prop).toMap)
 
     def &&(that: TypeGuard): TypeGuard = TypeGuard((for {
       dty <- (this.dtys ++ that.dtys).toList
-      constr = this(dty) && that(dty)
-      if !constr.isTop
-    } yield dty -> constr).toMap)
+      prop = this(dty) && that(dty)
+      if !prop.isTop
+    } yield dty -> prop).toMap)
 
-    def evaluate(lty: ValueTy, rty: ValueTy): TypeConstr =
-      if DemandType.disjoint(lty, rty) then TypeConstr()
+    def evaluate(lty: ValueTy, rty: ValueTy): TypeProp =
+      if TargetType.disjoint(lty, rty) then TypeProp()
       else {
         val constrs = for {
-          (dty, constr) <- map
+          (dty, prop) <- map
           if rty <= dty.ty
-        } yield constr
-        if constrs.isEmpty then TypeConstr()
+        } yield prop
+        if constrs.isEmpty then TypeProp()
         else constrs.reduce(_ && _)
       }
 
     def simple: TypeGuard =
-      TypeGuard(map.filterNot { (dty, constr) =>
-        map.exists { (tdty, tconstr) =>
-          (dty.ty != tdty.ty && dty.ty <= tdty.ty && tconstr <= constr)
+      TypeGuard(map.filterNot { (dty, prop) =>
+        map.exists { (tdty, tprop) =>
+          (dty.ty != tdty.ty && dty.ty <= tdty.ty && tprop <= prop)
         }
       })
 
@@ -110,7 +110,7 @@ trait TypeGuardDecl { self: TyChecker =>
   }
   object TypeGuard {
     val Empty: TypeGuard = TypeGuard()
-    def apply(ps: (DemandType, TypeConstr)*): TypeGuard = TypeGuard(
+    def apply(ps: (TargetType, TypeProp)*): TypeGuard = TypeGuard(
       ps.toMap,
     )
   }
@@ -126,11 +126,11 @@ trait TypeGuardDecl { self: TyChecker =>
       case NodeTarget(nd)          => nd
     def func: Func = cfg.funcOf(node)
 
-  case class DemandType(private val _ty: ValueTy) {
+  case class TargetType(private val _ty: ValueTy) {
     def ty: ValueTy = _ty
   }
 
-  object DemandType {
+  object TargetType {
     val set: Set[ValueTy] =
       if (useBooleanGuard) Set(TrueT, FalseT)
       else
@@ -145,19 +145,19 @@ trait TypeGuardDecl { self: TyChecker =>
           ENUMT_ASYNC,
         )
 
-    def apply(ty: ValueTy): DemandType =
-      if (DemandType.set.contains(ty)) new DemandType(ty)
+    def apply(ty: ValueTy): TargetType =
+      if (TargetType.set.contains(ty)) new TargetType(ty)
       else {
         Thread.dumpStack()
-        throw notSupported(s"Unsupported DemandType: $ty")
+        throw notSupported(s"Unsupported TargetType: $ty")
       }
 
-    def from(givenTy: ValueTy): Set[DemandType] =
-      DemandType.set
+    def from(givenTy: ValueTy): Set[TargetType] =
+      TargetType.set
         .filter(ty => !disjoint(givenTy, ty))
-        .map(DemandType(_))
+        .map(TargetType(_))
 
-    // whether `(l && r).isBottom`, cached when one side is a demand type;
+    // whether `(l && r).isBottom`, cached when one side is a target type;
     // the operand order of the original meet is kept in separate caches
     private val givenFirst =
       scala.collection.mutable.HashMap.empty[ValueTy, Set[ValueTy]]
@@ -175,8 +175,8 @@ trait TypeGuardDecl { self: TyChecker =>
       else (l && r).isBottom
   }
 
-  /** type constraints */
-  case class TypeConstr(
+  /** type proposition */
+  case class TypeProp(
     map: Map[Base, (ValueTy, Provenance)] = Map(),
     sexpr: Option[SymExpr] = None,
   ) {
@@ -184,7 +184,7 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def nonTop: Boolean = !isTop
 
-    def <=(that: TypeConstr): Boolean =
+    def <=(that: TypeProp): Boolean =
       that.map.forall {
         case (x, (rty, rprov)) =>
           this.map.get(x).fold(false) {
@@ -194,8 +194,8 @@ trait TypeGuardDecl { self: TyChecker =>
           }
       } && (this.sexpr == that.sexpr)
 
-    def ||(that: TypeConstr): TypeConstr =
-      TypeConstr(
+    def ||(that: TypeProp): TypeProp =
+      TypeProp(
         map = (for {
           x <- (this.map.keySet intersect that.map.keySet).toList
           (lty, lprov) = this.map(x)
@@ -209,8 +209,8 @@ trait TypeGuardDecl { self: TyChecker =>
         sexpr = this.sexpr || that.sexpr,
       )
 
-    def &&(that: TypeConstr): TypeConstr =
-      TypeConstr(
+    def &&(that: TypeProp): TypeProp =
+      TypeProp(
         map = (for {
           x <- (this.map.keySet ++ that.map.keySet).toList
           (lty, lprov) = this.map.getOrElse(x, (ValueTy.Top, Provenance.Top))
@@ -231,20 +231,20 @@ trait TypeGuardDecl { self: TyChecker =>
       map.keySet.collect { case s: Sym => s } ++
       sexpr.fold(Set[Base]())(_.bases)
 
-    def kill(bases: Set[Base])(using AbsState): TypeConstr =
+    def weaken(bases: Set[Base])(using AbsState): TypeProp =
       this.copy(
         map.filter { case (x, _) => !bases.contains(x) },
-        sexpr.fold(None)(_.kill(bases)),
+        sexpr.fold(None)(_.weaken(bases)),
       )
 
-    def kill(effect: Effect): TypeConstr =
+    def weaken(effect: Effect): TypeProp =
       import TypeGuardDecl.this.Effect.*
-      TypeConstr(map.map {
+      TypeProp(map.map {
         case (x, (ty, prov)) =>
           x -> (effect(ty), prov)
       })
 
-    def forReturn(symEnv: Map[Sym, ValueTy]): TypeConstr = TypeConstr(
+    def instantiate(symEnv: Map[Sym, ValueTy]): TypeProp = TypeProp(
       map = for {
         case (x: Sym, (ty, prov)) <- map
         origTy = symEnv.getOrElse(x, BotT)
@@ -254,16 +254,16 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def depth: Int = map.values.map(_._2).map(_.depth).max
 
-    def lift(using st: AbsState): TypeConstr =
-      this && st.constr
+    def lift(using st: AbsState): TypeProp =
+      this && st.prop
 
     override def toString: String = (new Appender >> this).toString
   }
-  object TypeConstr {
-    def apply(sexpr: SymExpr): TypeConstr =
-      TypeConstr(sexpr = Some(sexpr))
-    def apply(pairs: (Base, (ValueTy, Provenance))*): TypeConstr =
-      TypeConstr(pairs.toMap, None)
+  object TypeProp {
+    def apply(sexpr: SymExpr): TypeProp =
+      TypeProp(sexpr = Some(sexpr))
+    def apply(pairs: (Base, (ValueTy, Provenance))*): TypeProp =
+      TypeProp(pairs.toMap, None)
   }
 
   /** symbolic expressions */
@@ -309,30 +309,30 @@ trait TypeGuardDecl { self: TyChecker =>
     // case SEOr(left, right)     => left.bases ++ right.bases
     // case SEAnd(left, right)    => left.bases ++ right.bases
     // case SENot(expr)           => expr.bases
-    def kill(bases: Set[Base]): Option[SymExpr] = this match
+    def weaken(bases: Set[Base]): Option[SymExpr] = this match
       case SEBool(b) => Some(this)
       case SERef(ref) =>
-        ref.killRef(ref, bases, true).map(SERef(_)) // FIXME: check later
-      case SEExists(ref) => ref.killRef(ref, bases, true).map(SEExists(_))
-      case SETypeCheck(base, ty) => base.kill(bases).map(SETypeCheck(_, ty))
-      case SETypeOf(base)        => base.kill(bases).map(SETypeOf(_))
+        ref.weakenRef(ref, bases, true).map(SERef(_)) // FIXME: check later
+      case SEExists(ref) => ref.weakenRef(ref, bases, true).map(SEExists(_))
+      case SETypeCheck(base, ty) => base.weaken(bases).map(SETypeCheck(_, ty))
+      case SETypeOf(base)        => base.weaken(bases).map(SETypeOf(_))
       case SEEq(left, right) =>
         for {
-          l <- left.kill(bases)
-          r <- right.kill(bases)
+          l <- left.weaken(bases)
+          r <- right.weaken(bases)
         } yield SEEq(l, r)
     // case SEOr(left, right) =>
     //   for {
-    //     l <- left.kill(bases)
-    //     r <- right.kill(bases)
+    //     l <- left.weaken(bases)
+    //     r <- right.weaken(bases)
     //   } yield SEOr(l, r)
     // case SEAnd(left, right) =>
-    //   (left.kill(bases), right.kill(bases)) match
+    //   (left.weaken(bases), right.weaken(bases)) match
     //     case (Some(l), Some(r)) => Some(l && r)
     //     case (Some(l), None)    => Some(l)
     //     case (None, Some(r))    => Some(r)
     //     case _                  => None
-    // case SENot(expr) => expr.kill(bases).map(SENot(_))
+    // case SENot(expr) => expr.weaken(bases).map(SENot(_))
     override def toString: String = (new Appender >> this).toString
   }
   object SymExpr {
@@ -367,7 +367,7 @@ trait TypeGuardDecl { self: TyChecker =>
     // Returns Some(true/false) only if all annotated leaves agree; otherwise None.
     final def truthOpt: Option[Boolean] = this match
       case Leaf(_, _, _, truth)  => truth
-      case CallPath(_, _, child) => child.truthOpt
+      case CallNode(_, _, child) => child.truthOpt
       case Join(children) =>
         val ts = children.flatMap(_.truthOpt)
         if (ts.isEmpty) None
@@ -392,7 +392,7 @@ trait TypeGuardDecl { self: TyChecker =>
           case (Leaf(lnode, _, lty, _), Leaf(rnode, _, rty, _)) =>
             if lty == rty then lnode == rnode
             else lty <= rty
-          case (CallPath(lcall, lty, lchild), CallPath(rcall, rty, rchild)) =>
+          case (CallNode(lcall, lty, lchild), CallNode(rcall, rty, rchild)) =>
             if lty == rty then lcall == rcall && lchild <= rchild
             else lty <= rty
           case (l @ Join(lchild), r @ Join(rchild)) =>
@@ -423,12 +423,12 @@ trait TypeGuardDecl { self: TyChecker =>
             val truth = if (ltruth == rtruth) ltruth else None
             Leaf(lnode, base, lty || rty, truth)
           else Join(Set(this, that)).canonical
-        case (CallPath(lcall, lty, lchild), CallPath(rcall, rty, rchild)) =>
-          if lcall == rcall then CallPath(lcall, lty || rty, lchild || rchild)
+        case (CallNode(lcall, lty, lchild), CallNode(rcall, rty, rchild)) =>
+          if lcall == rcall then CallNode(lcall, lty || rty, lchild || rchild)
           else Join(Set(this, that)).canonical
-        case (prov: (Leaf | CallPath), Join(child)) =>
+        case (prov: (Leaf | CallNode), Join(child)) =>
           Join(child + prov).canonical
-        case (Join(child), prov: (Leaf | CallPath)) =>
+        case (Join(child), prov: (Leaf | CallNode)) =>
           Join(child + prov).canonical
         case (Join(lchild), Join(rchild)) =>
           Join(lchild ++ rchild).canonical
@@ -454,12 +454,12 @@ trait TypeGuardDecl { self: TyChecker =>
             val truth = if (ltruth == rtruth) ltruth else None
             Leaf(lnode, base, lty && rty, truth)
           else Meet(Set(this, that)).canonical
-        case (CallPath(lcall, lty, lchild), CallPath(rcall, rty, rchild)) =>
-          if lcall == rcall then CallPath(lcall, lty && rty, lchild && rchild)
+        case (CallNode(lcall, lty, lchild), CallNode(rcall, rty, rchild)) =>
+          if lcall == rcall then CallNode(lcall, lty && rty, lchild && rchild)
           else Meet(Set(this, that)).canonical
-        case (prov: (Leaf | CallPath), Meet(child)) =>
+        case (prov: (Leaf | CallNode), Meet(child)) =>
           Meet(child + prov).canonical
-        case (Meet(child), prov: (Leaf | CallPath)) =>
+        case (Meet(child), prov: (Leaf | CallNode)) =>
           Meet(child + prov).canonical
         case (Meet(lchild), Meet(rchild)) =>
           Meet(lchild ++ rchild).canonical
@@ -468,7 +468,7 @@ trait TypeGuardDecl { self: TyChecker =>
 
     def existsDuplicateCall(c: Call): Boolean =
       this match
-        case CallPath(call, _, child) =>
+        case CallNode(call, _, child) =>
           if call == c then true
           else child.existsDuplicateCall(c)
         case Join(child) => child.exists(_.existsDuplicateCall(c))
@@ -480,9 +480,9 @@ trait TypeGuardDecl { self: TyChecker =>
       ty: ValueTy,
     ): Provenance = // ONLY WORKS WITH NO VIEW
       this match
-        case CallPath(c, _, child) =>
-          if c == call then CallPath(c, ty, child)
-          else CallPath(c, ty, child.replaceCall(call, ty))
+        case CallNode(c, _, child) =>
+          if c == call then CallNode(c, ty, child)
+          else CallNode(c, ty, child.replaceCall(call, ty))
         case Join(child) => Join(child.map(_.replaceCall(call, ty)))
         case Meet(child) => Meet(child.map(_.replaceCall(call, ty)))
         case _           => this
@@ -529,11 +529,11 @@ trait TypeGuardDecl { self: TyChecker =>
           )
         case _ => this
 
-    def forReturn(call: Call, ty: ValueTy): Provenance =
+    def instantiate(call: Call, ty: ValueTy): Provenance =
       if this == Bot then Bot
       else if this == Top then Top
       else if this.existsDuplicateCall(call) then this.replaceCall(call, ty)
-      else CallPath(call, ty, this)
+      else CallNode(call, ty, this)
 
     def usedForRefine(
       target: RefinementTarget,
@@ -583,16 +583,16 @@ trait TypeGuardDecl { self: TyChecker =>
       s"Leaf(${cfg.funcOf(node).nameWithId}:${node.id}, $ty)"
     def toTree(indent: Int): String = s"${"  " * indent}$this"
   }
-  case class CallPath(call: Call, ty: ValueTy, child: Provenance)
+  case class CallNode(call: Call, ty: ValueTy, child: Provenance)
     extends Provenance {
     def size: Int = child.size + 1
     def depth: Int = child.depth + 1
     def leafCnt: Int = child.leafCnt
 
     override def toString =
-      s"CallPath(${cfg.funcOf(call).nameWithId}:${call.id}, $ty, ${child.toString})"
+      s"CallNode(${cfg.funcOf(call).nameWithId}:${call.id}, $ty, ${child.toString})"
     def toTree(indent: Int): String =
-      s"${"  " * indent}CallPath(${cfg.funcOf(call).nameWithId}:${call.id}, $ty)\n${child
+      s"${"  " * indent}CallNode(${cfg.funcOf(call).nameWithId}:${call.id}, $ty)\n${child
         .toTree(indent + 1)}"
   }
   case class Join(child: Set[Provenance]) extends Provenance {
@@ -673,7 +673,7 @@ trait TypeGuardDecl { self: TyChecker =>
       case Leaf(node, _, _, _) =>
         val f = cfg.funcOf(node)
         f.name == fname || f.irFunc.name == fname
-      case CallPath(call, _, child) =>
+      case CallNode(call, _, child) =>
         // Detect direct calls to a target algorithm by closure name or SDO method
         val direct = call.callInst match
           case ICall(_, fexpr, _) =>
@@ -730,22 +730,22 @@ trait TypeGuardDecl { self: TyChecker =>
   /** Provenance pretty printer (spec-like) */
   given Rule[Provenance] = (app, prov) => ProvTextPrinter.print(app, prov)
 
-  /** TypeConstr */
-  given Rule[TypeConstr] = (app, constr) =>
-    import TypeConstr.*
+  /** TypeProp */
+  given Rule[TypeProp] = (app, prop) =>
+    import TypeProp.*
     given Rule[(ValueTy, Provenance)] =
       case (app, (ty, prov)) if useProvenance => app >> ty >> " ~~\n" >> prov
       case (app, (ty, prov))                  => app >> ty
     import SymTy.given
     given Rule[Map[Base, (ValueTy, Provenance)]] = sortedMapRule(sep = ": ")
-    if (constr.map.nonEmpty) app >> constr.map
-    constr.sexpr.fold(app) { app >> _ }
+    if (prop.map.nonEmpty) app >> prop.map
+    prop.sexpr.fold(app) { app >> _ }
 
   /** TypeGuard */
   given Rule[TypeGuard] = (app, guard) =>
-    given Ordering[DemandType] = Ordering.by(_.toString)
-    given Rule[DemandType] = (app, dty) => app >> dty.ty
-    given Rule[Map[DemandType, TypeConstr]] =
+    given Ordering[TargetType] = Ordering.by(_.toString)
+    given Rule[TargetType] = (app, dty) => app >> dty.ty
+    given Rule[Map[TargetType, TypeProp]] =
       sortedMapRule("{", "}", " => ")
     app >> guard.simple.map
 
@@ -773,7 +773,7 @@ trait TypeGuardDecl { self: TyChecker =>
     def getId(prov: Provenance): String =
       prov match
         case Leaf(node, _, ty, _)      => norm(s"Leaf${node.id}")
-        case CallPath(call, ty, child) => norm(s"call${call.id}")
+        case CallNode(call, ty, child) => norm(s"call${call.id}")
         case Join(child)               => norm(s"join${child.hashCode()}")
         case Meet(child)               => norm(s"meet${child.hashCode()}")
         case RefinePoint(target, _, _, _, _, _) =>
@@ -800,7 +800,7 @@ trait TypeGuardDecl { self: TyChecker =>
     def drawProvenance(prov: Provenance)(using app: Appender): Unit =
       drawProvenanceNode(prov)
       prov match
-        case CallPath(call, ty, child) => drawProvenance(child)
+        case CallNode(call, ty, child) => drawProvenance(child)
         case Join(child) =>
           child.foreach(drawProvenance)
         case Meet(child) =>
@@ -813,7 +813,7 @@ trait TypeGuardDecl { self: TyChecker =>
         case p @ Leaf(node, _, ty, _) =>
           drawNaming(getId(p), NODE_COLOR, node.name)
           drawNode(getId(p), "box", NODE_COLOR, BG_COLOR, Some(ty.toString))
-        case p @ CallPath(call, ty, child) =>
+        case p @ CallNode(call, ty, child) =>
           drawNaming(getId(p), NODE_COLOR, call.name)
           drawNode(getId(p), "box", NODE_COLOR, BG_COLOR, Some(ty.toString))
           drawEdge(getId(p), getId(child), EDGE_COLOR, None)
@@ -917,7 +917,7 @@ trait TypeGuardDecl { self: TyChecker =>
     private def stepSeqOf(prov: Provenance): Option[List[Int]] = prov match
       case RefinePoint(target, child, _, _, _, _) => stepSeqOf(target.node)
       case Leaf(node, _, _, _)                    => stepSeqOf(node)
-      case CallPath(call, _, child) => stepSeqOf(call).orElse(stepSeqOf(child))
+      case CallNode(call, _, child) => stepSeqOf(call).orElse(stepSeqOf(child))
       case Join(children) =>
         val seqs = children.toList.flatMap(stepSeqOf)
         if seqs.isEmpty then None else Some(seqs.minBy(stepsCode))
@@ -1017,7 +1017,7 @@ trait TypeGuardDecl { self: TyChecker =>
           val ordered = children.toList.sortBy(stepRankOf)
           ordered.foreach(render(app, _, depth, baseCtx))
 
-        case cp @ CallPath(call, cty, child) =>
+        case cp @ CallNode(call, cty, child) =>
           baseCtx.foreach { (nd, base) =>
             cp.truthOpt.foreach { b =>
               val baseStr = s"`${prettyBase(base, nd)}`"
@@ -1059,7 +1059,7 @@ trait TypeGuardDecl { self: TyChecker =>
     private def containsPlaceholder(prov: Provenance): Boolean = prov match
       case Placeholder(_)                    => true
       case RefinePoint(_, child, _, _, _, _) => containsPlaceholder(child)
-      case CallPath(_, _, child)             => containsPlaceholder(child)
+      case CallNode(_, _, child)             => containsPlaceholder(child)
       case Join(children) => children.exists(containsPlaceholder)
       case Meet(children) => children.exists(containsPlaceholder)
       case _              => false
@@ -1068,7 +1068,7 @@ trait TypeGuardDecl { self: TyChecker =>
       prov match
         case Placeholder(name)                 => Some(name)
         case RefinePoint(_, child, _, _, _, _) => findPlaceholderName(child)
-        case CallPath(_, _, child)             => findPlaceholderName(child)
+        case CallNode(_, _, child)             => findPlaceholderName(child)
         case Join(children) =>
           children.toList.flatMap(findPlaceholderName).headOption
         case Meet(children) =>

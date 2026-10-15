@@ -21,7 +21,7 @@ SETTINGS = [
     ("base", "base", "Base", "#000000", (0, (1, 1)), "x"),
     ("syn", "syn", "Syn", "#1f77b4", ":", "o"),
     ("our", "full", "Ours", TP_COLOR, "-", "s"),
-    ("boolean", "bool", r"Ours$_\mathsf{Bool}$", "#ff7f0e", "--", "^"),
+    ("boolean", "bool", r"Ours$_\mathsf{Bool}$", "#d4a05a", "--", "^"),
     ("pre", "no-mut", r"Ours$_\mathsf{NoMut}$", "#d62728", "-.", "v"),
     ("inval", "flow", r"Ours$_\mathsf{Inval}$", "#7f7f7f", (0, (5, 2, 1, 2)), "d"),
 ]
@@ -67,9 +67,9 @@ def draw_prec():
     for i, (name, _, label, color, style, marker) in enumerate(SETTINGS):
         df = load(name)
         prec = tp / df["# errors"].values * 100
-        (line,) = ax.plot(df["#"], prec, color=color, linestyle=style, linewidth=1.0,
-                          marker=marker, markersize=3, markevery=(3 * i, 16),
-                          markerfacecolor="white", markeredgewidth=0.8, label=label)
+        (line,) = ax.plot(df["#"], prec, color=color, linestyle=style, linewidth=(1.4 if label == "Ours" else 1.0),
+                          marker=marker, markersize=4, markevery=(3 * i, 16),
+                          markerfacecolor=(color if label == "Ours" else "white"), markeredgewidth=0.8, label=label)
         lines.append((prec.mean(), line))
     lines.sort(key=lambda x: -x[0])
     xaxis(ax)

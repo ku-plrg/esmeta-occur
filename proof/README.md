@@ -1,9 +1,9 @@
 # Lean 4 Mechanization of the Soundness Theorem
 
 This directory mechanizes the concrete semantics, the extended type analysis
-(Section 4 of the paper), and its soundness proof (Section 4.3) in Lean 4.
+(Section 3 of the paper), and its soundness proof (Section 3.4) in Lean 4.
 `tech-report.pdf` at the top of the artifact describes the definitions and the
-proof structure in detail; its Section 3 is the prose counterpart of this
+proof structure in detail; its Section 1.4 is the prose counterpart of this
 directory.
 
 ## How to Check the Proof
@@ -33,7 +33,7 @@ the top type. The false branch of a conditional uses the target type
 
 ## Correspondence to the Paper
 
-### Abstract domain and operations (Section 4.1, Section 4.2)
+### Abstract domain and operations (Section 3.2, Section 3.3)
 
 | Paper | Lean | File |
 |---|---|---|
@@ -41,18 +41,18 @@ the top type. The false branch of a conditional uses the target type
 | Field access `τ.f` on types | `tyField` | `GOT/Analysis/Weakening.lean` |
 | Symbolic types `τ^ω`, propositions `ψ`, guards `G`, abstract values, effects `δ`, typing results `Γ` | `SymTy`, `TyProp`, `Guard`, `AbsVal`, `Effect`, `TypingResult` | `GOT/Analysis/Domain.lean` |
 | Upper type bound `⌈τ^ω⌉_ψ` | `upperTy` | `GOT/Analysis/Weakening.lean` |
-| Fig. 9: guard lookup, update, refinement | `guardLookup`, `guardUpdate`, `guardRefine` | `GOT/Analysis/Evaluation.lean` |
-| Fig. 9: field lookup `G.f`, record type guard `{f_j : G_j}` | `fieldGuard`, `recordGuard` | `GOT/Analysis/Evaluation.lean` |
-| Fig. 10: abstract semantics of expressions `⟦e⟧(Γ)` and record allocation | `evalAbs`, `allocAbs` | `GOT/Analysis/Evaluation.lean` |
-| Fig. 10: call entry | `callEntry`, `callEntryPsi` | `GOT/Analysis/Calls.lean` |
-| Fig. 10: return (instantiate, `apply`, `bind`, `update_x`) | return case of `ValidAnalysis` | `GOT/Model.lean` |
-| Fig. 11: guard inference for `e : τ`, `infer_ψ`, `bind` | `checkGuard`, `inferPsi` (`symDerive`, `checkDerive`), `bindG` | `GOT/Analysis/Evaluation.lean` |
-| Fig. 12: `instantiate`, `ψ.instantiate_δ`, argument descriptions `τ̃^ω_k = weaken_δ(τ^ω_k)` | `instantiate`, `psiInstantiate`, `argSymTy`, `symGuardInstantiate`, `symInstantiate` | `GOT/Analysis/Calls.lean` |
-| Fig. 13: refinement | `refineOp`, `refineProp` | `GOT/Analysis/Evaluation.lean` |
-| Fig. 14: `update_x`, `update_f`, `apply` | `updateX`, `updateF`, `applyEff` | `GOT/Analysis/Evaluation.lean` |
-| Fig. 14: `weaken_δ` on types, propositions, guards, symbolic types, typing results; `δ ⨟ δ'` | `weakenTy`, `weakenDelta`, `weakenGuard`, `weakenSym`, `weakenTR`, `composeEff` | `GOT/Analysis/Weakening.lean` |
+| Fig. 6: guard lookup, update, refinement | `guardLookup`, `guardUpdate`, `guardRefine` | `GOT/Analysis/Evaluation.lean` |
+| Fig. 6: field lookup `G.f`, record type guard `{f_j : G_j}` | `fieldGuard`, `recordGuard` | `GOT/Analysis/Evaluation.lean` |
+| Figs. 7 and 8: abstract semantics of expressions `⟦e⟧_e(Γ)` and record allocation | `evalAbs`, `allocAbs` | `GOT/Analysis/Evaluation.lean` |
+| Fig. 8: call entry | `callEntry`, `callEntryPsi` | `GOT/Analysis/Calls.lean` |
+| Fig. 8: return (instantiate, `apply`, `bind`, `update_x`) | return case of `ValidAnalysis` | `GOT/Model.lean` |
+| Section 3.3.1: guard inference for `e : τ`, `infer_ψ`, `bind` | `checkGuard`, `inferPsi` (`symDerive`, `checkDerive`), `bindG` | `GOT/Analysis/Evaluation.lean` |
+| Section 3.3.2: `instantiate`, `ψ.instantiate_δ`, argument descriptions `τ̃^ω_k = weaken_δ(τ^ω_k)` | `instantiate`, `psiInstantiate`, `argSymTy`, `symGuardInstantiate`, `symInstantiate` | `GOT/Analysis/Calls.lean` |
+| Fig. 9 and Section 3.3.3: refinement | `refineOp`, `refineProp` | `GOT/Analysis/Evaluation.lean` |
+| Fig. 10 and Section 3.3.4: `update_x`, `update_f`, `apply` | `updateX`, `updateF`, `applyEff` | `GOT/Analysis/Evaluation.lean` |
+| Section 3.3.4: `weaken_δ` on types, propositions, guards, symbolic types, typing results; `δ ⨟ δ'` | `weakenTy`, `weakenDelta`, `weakenGuard`, `weakenSym`, `weakenTR`, `composeEff` | `GOT/Analysis/Weakening.lean` |
 
-### Concretization and soundness (Section 4.3)
+### Concretization and soundness (Section 3.4)
 
 | Paper | Lean | File |
 |---|---|---|
@@ -65,8 +65,8 @@ the top type. The false branch of a conditional uses the target type
 | State coverage `σ ∈ γ(Ŝ)` | `Covers` (with `ArgsOK`, `PendingOK`, `WFMem`) | `GOT/Model.lean` |
 | Semantic order `⊑`, `Valid(P, Ŝ)` | `leTR`, `ValidAnalysis` | `GOT/Model.lean` |
 | Well-formed programs | `WFProgram` | `GOT/Analysis/Calls.lean` |
-| Theorem 4.1 (soundness) | `soundness` | `GOT/Soundness/Main.lean` |
-| Theorem 4.1 (type soundness of variables) | `var_type_sound` | `GOT/Soundness/Main.lean` |
+| Theorem 3.1 (soundness) | `soundness` | `GOT/Soundness/Main.lean` |
+| Theorem 3.1 (type soundness of variables) | `var_type_sound` | `GOT/Soundness/Main.lean` |
 | Preservation by one transition (proof sketch) | `step_preserves` | `GOT/Soundness/Main.lean` |
 | Valid analysis results exist | `topAnalysis_valid`, `topAnalysis_covers_main` | `GOT/Soundness/Evaluation.lean` |
 

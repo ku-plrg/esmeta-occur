@@ -53,22 +53,22 @@ trait AbsValueDecl { self: TyChecker =>
     def addGuard(guard: TypeGuard)(using AbsState): AbsValue =
       this.copy(guard = (this.guard && guard).filter(this.ty))
 
-    /** kill bases */
-    def kill(bases: Set[Base], update: Boolean)(using AbsState): AbsValue =
+    /** weaken bases */
+    def weaken(bases: Set[Base], update: Boolean)(using AbsState): AbsValue =
       val ty = this.symty.bases.exists(bases.contains) match
         case true  => STy(this.ty)
         case false => this.symty
-      val guard = if (update) this.guard.kill(bases) else this.guard
+      val guard = if (update) this.guard.weaken(bases) else this.guard
       AbsValue(ty, guard)
 
-    /** kill field */
-    def kill(effect: Effect)(using AbsState): AbsValue =
-      val sty = this.symty.kill(effect)
-      val guard = this.guard.kill(effect)
+    /** weaken field */
+    def weaken(effect: Effect)(using AbsState): AbsValue =
+      val sty = this.symty.weaken(effect)
+      val guard = this.guard.weaken(effect)
       AbsValue(sty, guard)
 
     /** remove non-parameter local variables */
-    def forReturn(
+    def instantiate(
       givenSt: AbsState,
       func: Func,
       entrySt: AbsState,
@@ -76,7 +76,7 @@ trait AbsValueDecl { self: TyChecker =>
       given AbsState = givenSt
       if (isTypeGuardCandidate(func)) {
         val xs = givenSt.getImprecBases(entrySt)
-        this.kill(xs, update = false)
+        this.weaken(xs, update = false)
       } else AbsValue(this.ty)
 
     /** get symbols */
@@ -91,15 +91,15 @@ trait AbsValueDecl { self: TyChecker =>
     /** check whether it has a type guard */
     def hasTypeGuard(entrySt: AbsState): Boolean =
       import SymTy.*, SymExpr.*
-      guard.map.exists { (kind, constr) =>
-        constr.map.exists {
+      guard.map.exists { (kind, prop) =>
+        prop.map.exists {
           case (x: Sym, (ty, _)) => !(entrySt.getTy(SERef(SSym(x))) <= ty)
           case _                 => false
         }
       }
 
-    def killMutable(using np: NodePoint[_], st: AbsState) =
-      this.copy(guard = this.guard.kill(np.func.mutableLocals))
+    def weakenMutable(using np: NodePoint[_], st: AbsState) =
+      this.copy(guard = this.guard.weaken(np.func.mutableLocals))
 
     def isSymbolic: Boolean = symty.isSymbolic
 
