@@ -3,7 +3,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 import matplotlib as mpl
 from pathlib import Path
 import argparse
@@ -15,11 +14,17 @@ _args.add_argument("--cap-leaf", type=int, default=None)
 CAPS = {"Size": _args.parse_args().cap_size, "Leaf Count": _args.parse_args().cap_leaf}
 
 # Publication-friendly font & proper PDF embedding
-mpl.rcParams["font.family"] = "Helvetica"     # fallback to Arial if missing
 mpl.rcParams["pdf.fonttype"] = 42             # embed TrueType glyphs
+plt.rc("font", size=7)
 
-# Use Seaborn "mako" colormap (reversed so low = bright, high = dark)
-CMAP = sns.color_palette("mako", as_cmap=True).reversed()
+# Each heatmap is printed at about 1.8 in wide (a third of the text width),
+# so it is drawn at that size: colors only (no numbers), white for zero
+# cells, a log color scale, and a slim color bar.
+FIG_SIZE = (1.8, 1.75)
+# Skip the palest part of YlGnBu so that a count of 1 is still visible
+CMAP = mpl.colors.LinearSegmentedColormap.from_list(
+    "YlGnBu_trunc", mpl.colormaps["YlGnBu"](np.linspace(0.15, 1.0, 256)))
+CMAP.set_under("white")                       # zero cells are white
 
 def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> None:
     """Read three-column CSV (x, y, count) and save a log-scaled heatmap."""
@@ -47,45 +52,49 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
         df.set_index([y_name, x_name])["cnt"]
           .reindex(grid, fill_value=0)
           .unstack(level=1)  # columns = x
+    ).to_numpy()
+
+    # Fixed axes positions so that all heatmaps have the same size on paper
+    fig = plt.figure(figsize=FIG_SIZE)
+    ax = fig.add_axes([0.20, 0.16, 0.64, 0.82])
+    cax = fig.add_axes([0.86, 0.16, 0.035, 0.82])
+    vmax = max(hm.max(), 10)
+    im = ax.imshow(
+        hm, cmap=CMAP, origin="lower", aspect="auto",
+        norm=mpl.colors.LogNorm(vmin=1, vmax=vmax),   # zero cells fall below vmin
+        extent=(x_min - 0.5, x_max + 0.5, y_min - 0.5, y_max + 0.5),
     )
+    # Thin grid lines between cells
+    ax.set_xticks(np.arange(x_min, x_max + 1) - 0.5, minor=True)
+    ax.set_yticks(np.arange(y_min, y_max + 1) - 0.5, minor=True)
+    ax.grid(which="minor", color="#cccccc", linewidth=0.3)
+    ax.tick_params(which="minor", length=0)
+    ax.tick_params(which="major", length=2, pad=1)
 
-    # Log scale of counts for color; zeros stay 0 after log1p
-    log_hm = np.log1p(hm)
-
-    # Mask only the (min y, min x) cell so it's blank; everything else shows
-    mask = np.zeros_like(log_hm, dtype=bool)
-    mask[0, 0] = True
-
-    plt.figure(figsize=(6, 6))    # square figure
-    ax = sns.heatmap(
-        log_hm,
-        mask=mask,
-        annot=hm.to_numpy(),       # annotate with original counts, including zeros
-        fmt=".0f",
-        cmap=CMAP,                  # low = bright, high = dark
-        cbar=False,                # remove legend
-        annot_kws={"size": 12},
-        vmin=0                     # ensure zeros map to the lowest color, not "bad"
-    )
-
-    # Put lower values at bottom (like your original)
-    ax.invert_yaxis()
-
-    # Force every tick to render; no skipping in the middle
-    ax.set_xticks(np.arange(len(x_vals)) + 0.5)
-    ax.set_yticks(np.arange(len(y_vals)) + 0.5)
-    def labels(vals, name):
+    # Label every integer when there are few, every other one otherwise
+    def ticks(vals, name):
         cap = CAPS.get(name)
-        return [f"{v}+" if cap is not None and v == cap else str(v) for v in vals]
-    ax.set_xticklabels(labels(x_vals, x_name), rotation=0)
-    ax.set_yticklabels(labels(y_vals, y_name), rotation=0)
+        step = 1 if len(vals) <= 10 else (2 if len(vals) <= 14 else 4)
+        shown = [v for v in vals if (v - vals[0]) % step == 0]
+        if shown[-1] != vals[-1]:             # always label the capped last cell
+            shown[-1] = vals[-1]
+        labels = [f"{v}+" if cap is not None and v == cap else str(v) for v in shown]
+        return shown, labels
+    xt, xl = ticks(x_vals, x_name)
+    yt, yl = ticks(y_vals, y_name)
+    ax.set_xticks(xt); ax.set_xticklabels(xl)
+    ax.set_yticks(yt); ax.set_yticklabels(yl)
+    ax.set_xlabel(x_name, labelpad=1)
+    ax.set_ylabel(y_name, labelpad=1)
+    for side in ax.spines.values():
+        side.set_linewidth(0.4)
 
-    ax.set_xlabel(x_name, fontsize=15, fontweight="bold")
-    ax.set_ylabel(y_name, fontsize=15, fontweight="bold")
-    ax.tick_params(axis="both", labelsize=12)
-    plt.tight_layout()
-    plt.savefig(pdf_path)
-    plt.close()
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.ax.tick_params(length=2, pad=1, labelsize=6)
+    cbar.ax.minorticks_off()
+    cbar.outline.set_linewidth(0.4)
+    fig.savefig(pdf_path)
+    plt.close(fig)
 
 # === Generate all three heatmaps ============================================
 tasks = [
