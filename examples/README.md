@@ -17,4 +17,5 @@ result and the checker version.
 | `racket-prop-var.rkt`, `flow-prop-var.js`, `mlsem-prop-var.ml` | proposition stored in a variable | Flow rejects, others accept |
 | `racket-prop-call.rkt`, `flow-prop-call.js`, `mlsem-prop-call.ml` | proposition propagated across a call | Typed Racket accepts, Flow and MLsem (with annotation) reject |
 | `racket-mutation.rkt`, `flow-mutation.js`, `mlsem-mutation.ml` | refinement after reassignment of a variable | Typed Racket rejects, others accept |
+| `flow-field-call.js` | refinement of an object property across a call (Section 2.2.2) | Flow drops it even at a call that writes nothing, keeps it after a write to another property |
 | `mlsem-global-*.ml`, `mlsem-record-call*.ml` | refinement of a mutable variable across a call, record result across a call | see the first line of each file |
