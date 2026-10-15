@@ -69,7 +69,7 @@ def draw_prec():
         prec = tp / df["# errors"].values * 100
         (line,) = ax.plot(df["#"], prec, color=color, linestyle=style, linewidth=(1.4 if label == "Ours" else 1.0),
                           marker=marker, markersize=4, markevery=(3 * i, 16),
-                          markerfacecolor=(color if label == "Ours" else "white"), markeredgewidth=0.8, label=label)
+                          markerfacecolor="white", markeredgewidth=0.8, label=label)
         lines.append((prec.mean(), line))
     lines.sort(key=lambda x: -x[0])
     xaxis(ax)
