@@ -20,7 +20,7 @@ plt.rc("font", size=7)
 # Each heatmap is printed at about 1.8 in wide (a third of the text width),
 # so it is drawn at that size: colors only (no numbers), white for zero
 # cells, a log color scale, and a slim color bar.
-FIG_SIZE = (1.8, 1.75)
+FIG_SIZE = (1.8, 1.4)
 # Skip the palest part of YlGnBu so that a count of 1 is still visible
 CMAP = mpl.colors.LinearSegmentedColormap.from_list(
     "YlGnBu_trunc", mpl.colormaps["YlGnBu"](np.linspace(0.15, 1.0, 256)))
@@ -52,12 +52,15 @@ def make_heatmap(csv_path: Path, x_name: str, y_name: str, pdf_path: Path) -> No
         df.set_index([y_name, x_name])["cnt"]
           .reindex(grid, fill_value=0)
           .unstack(level=1)  # columns = x
-    ).to_numpy()
+    ).to_numpy().copy()
+
+    # Blank the (min y, min x) cell: trees with no Call, Join, or Meet node
+    hm[0, 0] = 0
 
     # Fixed axes positions so that all heatmaps have the same size on paper
     fig = plt.figure(figsize=FIG_SIZE)
-    ax = fig.add_axes([0.20, 0.16, 0.64, 0.82])
-    cax = fig.add_axes([0.86, 0.16, 0.035, 0.82])
+    ax = fig.add_axes([0.20, 0.19, 0.64, 0.79])
+    cax = fig.add_axes([0.86, 0.19, 0.035, 0.79])
     vmax = max(hm.max(), 10)
     im = ax.imshow(
         hm, cmap=CMAP, origin="lower", aspect="auto",

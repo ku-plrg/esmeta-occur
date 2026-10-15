@@ -19,7 +19,7 @@ SERIES = [
 ]
 
 # Figure size matches the printed size (.49 of the 5.5 in text width).
-PERF_SIZE = (2.7, 1.3)
+PERF_SIZE = (2.7, 1.5)
 plt.rc("font", size=7)
 
 def load(name):
