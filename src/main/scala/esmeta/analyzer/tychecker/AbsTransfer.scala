@@ -286,7 +286,8 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         // a typed callee has no analyzed effect, but an invalidating call still
         // invalidates every field proposition of the caller
         val afterSt =
-          if (useInvalidateCall) callerSt.weaken(Effect.Invalidate) else callerSt
+          if (useInvalidateCall) callerSt.weaken(Effect.Invalidate)
+          else callerSt
         val newRetV = {
           given AbsState = afterSt
           (for {
@@ -300,7 +301,10 @@ trait AbsTransferDecl { analyzer: TyChecker =>
         }
         for {
           nextNp <- getAfterCallNp(callerNp)
-          newSt = afterSt.define(call.lhs, newRetV.weakenMutable(using callerNp))
+          newSt = afterSt.define(
+            call.lhs,
+            newRetV.weakenMutable(using callerNp),
+          )
         } analyzer += nextNp -> newSt
       }
       // get locals

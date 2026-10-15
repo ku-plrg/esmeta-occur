@@ -112,7 +112,8 @@ trait AbsStateDecl { self: TyChecker =>
 
     /** weaken bases */
     def weaken(bases: Set[Base], update: Boolean): AbsState =
-      val newLocals = for { (x, v) <- locals } yield x -> v.weaken(bases, update)
+      val newLocals =
+        for { (x, v) <- locals } yield x -> v.weaken(bases, update)
       val newProp = if (update) prop.weaken(bases) else prop
       AbsState(reachable, newLocals, symEnv, newProp, effect)
 

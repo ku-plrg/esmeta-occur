@@ -96,9 +96,9 @@ class TypeGuardSmallTest extends AnalyzerTest {
         heap(addr, key)
       case SymTy.SSym(sym) => fail(s"Unexpected caller symbol: $sym")
 
-    def checkConstr(constr: TypeProp): Unit =
-      assert(constr.sexpr.isEmpty)
-      constr.map.foreach {
+    def checkProp(prop: TypeProp): Unit =
+      assert(prop.sexpr.isEmpty)
+      prop.map.foreach {
         case (local: Local, (ty, _)) =>
           assert(
             ty.contains(values(local), heap),
@@ -118,11 +118,11 @@ class TypeGuardSmallTest extends AnalyzerTest {
       value.symty match
         case ref: SymRef => assert(read(ref) == concrete)
         case _           => ()
-      value.guard.map.foreach { (dty, constr) =>
-        if dty.ty.contains(concrete, heap) then checkConstr(constr)
+      value.guard.map.foreach { (dty, prop) =>
+        if dty.ty.contains(concrete, heap) then checkProp(prop)
       }
     }
-    checkConstr(st.constr)
+    checkProp(st.prop)
 
   // registration
   def init: Unit = {
