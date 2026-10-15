@@ -48,11 +48,11 @@ The results are written to `logs/analyze`:
 - `summary`: one line of statistics (iterations, duration, number of alarms, number of guards, and provenance statistics).
 - `guards`, `refined`, `types`: the inferred type guards, refined variables, and inferred types.
 
-On `d502ea4` (the first version in `versions`, right after ES2024), the full setting reports 64 alarms.
+On `d502ea4` (the first version in `versions`, right after ES2024), the full setting reports 65 alarms.
 
 ## Reproducing the Evaluation
 
-### Alarms, precision, and performance (Figures 16 and 17, Table 2)
+### Alarms, precision, and performance (Figures 11 and 12, Table 1)
 
 `benchmark.sh` runs every setting on the 253 versions of ECMA-262 listed in `versions`:
 
@@ -62,7 +62,7 @@ On `d502ea4` (the first version in `versions`, right after ES2024), the full set
 
 One setting on 253 versions takes from about 30 minutes (Syn, Ours_Inval) to 3 hours (Ours, Prov) on one machine. To run only some settings, comment out the other `doit` lines at the end of the script. `benchmark-test.sh` runs the same loop on the three versions in `versions-test` as a smoke test.
 
-The results are collected in `result/<setting>/summary.tsv`, one row per version, where `<setting>` is one of `base`, `syn`, `pre` (Ours_NoMut), `bool`, `inval`, `our`, and `prov`. The per-version logs are in `result/<setting>/<index>/`. The columns used in the paper are:
+The results are collected in `result/<setting>/summary.tsv`, one row per version, where `<setting>` is one of `base`, `syn`, `pre` (Ours_NoMut), `boolean`, `inval`, `our`, and `prov`. The per-version logs are in `result/<setting>/<index>/`. The columns used in the paper are:
 
 - `# errors`: the number of alarms (Figure 11).
 - `iter` and `duration (ms)`: the number of iterations and the analysis time (Figure 12).
